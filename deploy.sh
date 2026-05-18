@@ -10,13 +10,32 @@ SKIP_BUILD=false
 SKIP_FRONTEND=false
 SKIP_BACKEND=false
 WITH_VENDOR=false
+RUN_MIGRATE=false
 
 for arg in "$@"; do
   case $arg in
-    --no-build)    SKIP_BUILD=true ;;
-    --only-frontend) SKIP_BACKEND=true ;;
-    --only-backend)  SKIP_FRONTEND=true; SKIP_BUILD=true ;;
-    --with-vendor)   WITH_VENDOR=true ;;
+    --no-build)       SKIP_BUILD=true ;;
+    --only-frontend)  SKIP_BACKEND=true ;;
+    --only-backend)   SKIP_FRONTEND=true; SKIP_BUILD=true ;;
+    --with-vendor)    WITH_VENDOR=true ;;
+    --migrate)        RUN_MIGRATE=true ;;
+    --status)
+      echo "--- Estado de producción ---"
+      ssh -p "$SSH_PORT" "$SSH_HOST" bash << 'ENDSSH'
+        cd ~/domains/filmoclub.org/laravel
+        echo "== Migraciones (pendientes/ejecutadas) =="
+        php artisan migrate:status
+        echo ""
+        echo "== PHP version =="
+        php -v | head -1
+        echo ""
+        echo "== Último error en el log de Laravel =="
+        # Extrae el último bloque de log (desde el último [20 hasta el final)
+        grep -o '\[20[0-9][0-9]-[0-9][0-9]-[0-9][0-9].*' storage/logs/laravel.log 2>/dev/null | tail -5 || \
+          tail -30 storage/logs/laravel.log 2>/dev/null || echo "(sin log)"
+ENDSSH
+      exit 0
+      ;;
   esac
 done
 
@@ -81,11 +100,28 @@ if [ "$SKIP_BACKEND" = false ]; then
     # si el packages.php local y el vendor del servidor están desincronizados
     rm -f bootstrap/cache/packages.php bootstrap/cache/services.php
     composer install --no-dev --optimize-autoloader
-    php artisan migrate --force
-    php artisan config:clear
-    php artisan cache:clear
-    php artisan view:clear
+    php artisan optimize:clear
 ENDSSH
+
+  if [ "$RUN_MIGRATE" = true ]; then
+    echo ""
+    echo "--- Migraciones pendientes en producción ---"
+    ssh -p "$SSH_PORT" "$SSH_HOST" bash << 'ENDSSH'
+      cd ~/domains/filmoclub.org/laravel
+      php artisan migrate:status
+ENDSSH
+    echo ""
+    read -p "¿Ejecutar php artisan migrate --force? [s/N] " CONFIRM
+    if [[ "$CONFIRM" =~ ^[sS]$ ]]; then
+      ssh -p "$SSH_PORT" "$SSH_HOST" bash << 'ENDSSH'
+        cd ~/domains/filmoclub.org/laravel
+        php artisan migrate --force
+ENDSSH
+      echo "Migraciones ejecutadas."
+    else
+      echo "Migraciones omitidas."
+    fi
+  fi
 fi
 
 echo ""
