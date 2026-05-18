@@ -9,6 +9,7 @@ use App\Http\Controllers\TwoFactorController;
 
 use App\Http\Controllers\FilmController;
 use App\Http\Controllers\FilmDataController;
+use App\Http\Controllers\FilmProposalController;
 use App\Http\Controllers\TestsDBApisController;
 
 use App\Http\Controllers\PostController;
@@ -26,6 +27,8 @@ use App\Http\Controllers\UserFilmActionController;
 
 use App\Http\Controllers\UserFeedController;
 use App\Http\Controllers\UserController;
+use App\Http\Controllers\AdminUserController;
+use App\Http\Controllers\UserReportController;
 use App\Http\Controllers\SearchController;
 use App\Http\Controllers\RecommenderController;
 use App\Http\Controllers\EditorialController;
@@ -76,6 +79,28 @@ Route::post('/recommender/rank', [RecommenderController::class, 'rank'])
 // Ejemplo: GET http://cinemaclub.test/api/films/search?q=alien
 Route::get('/films/search', [FilmController::class, 'search'])
     ->name('api.films.search');
+
+/*
+|--------------------------------------------------------------------------
+|  -- PROPUESTAS DE PELÍCULAS (usuarios autenticados) --
+|--------------------------------------------------------------------------
+*/
+// Preview de TMDB sin guardar (10 req/min)
+Route::post('/film-proposals/preview', [FilmProposalController::class, 'preview'])
+    ->withoutMiddleware(\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class)
+    ->middleware(['auth:sanctum', 'throttle:10,1'])
+    ->name('api.film-proposals.preview');
+
+// Enviar propuesta (5 req/día = throttle 5,1440)
+Route::post('/film-proposals', [FilmProposalController::class, 'store'])
+    ->withoutMiddleware(\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class)
+    ->middleware(['auth:sanctum', 'throttle:5,1440'])
+    ->name('api.film-proposals.store');
+
+// Historial de propuestas del usuario autenticado
+Route::get('/film-proposals/mine', [FilmProposalController::class, 'mine'])
+    ->middleware('auth:sanctum')
+    ->name('api.film-proposals.mine');
 
 // VER película concreta 
 // Ejemplo: GET http://cinemaclub.test/api/films/3 (por id)
@@ -131,6 +156,14 @@ Route::middleware('auth:sanctum')
     // ESTADO DE LA COLA de jobs (monitor de importación)
     Route::get('/admin/queue-status', [FilmController::class, 'queueStatus'])
         ->name('api.admin.queue-status');
+
+    // PROPUESTAS DE PELÍCULAS — cola de revisión admin
+    Route::get('/admin/film-proposals', [FilmProposalController::class, 'index'])
+        ->name('api.admin.film-proposals.index');
+    Route::patch('/admin/film-proposals/{proposal}/approve', [FilmProposalController::class, 'approve'])
+        ->name('api.admin.film-proposals.approve');
+    Route::patch('/admin/film-proposals/{proposal}/reject', [FilmProposalController::class, 'reject'])
+        ->name('api.admin.film-proposals.reject');
 });
 
 
@@ -417,6 +450,15 @@ Route::middleware('auth:sanctum')->group(function () {
         ->withoutMiddleware(\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class)
         ->name('api.comments.destroy');
 
+    // LIKE / UNLIKE comentario
+    Route::post('/comments/{commentId}/like', [UserCommentController::class, 'toggleLike'])
+        ->middleware('throttle:30,1')
+        ->name('api.comments.like');
+
+    // FEED de últimos comentarios en films de usuarios seguidos
+    Route::get('/comments/community/films', [UserCommentController::class, 'communityFilmComments'])
+        ->name('api.comments.community.films');
+
 });
     // OBTENER comentarios (de un film o una entry) por IdFilm o o id de la entrada
     Route::get('/comments/{type}/{id}', [UserCommentController::class, 'index'])
@@ -523,6 +565,45 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/users/{user}/unblock', [UserController::class, 'unblock'])
         ->withoutMiddleware(\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class)
         ->name('api.users.unblock');
+
+    // DENUNCIAR usuario (cualquier usuario autenticado, rate-limited en controller)
+    Route::post('/users/{user}/report', [UserReportController::class, 'store'])
+        ->withoutMiddleware(\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class)
+        ->name('api.users.report');
+});
+
+/*
+|--------------------------------------------------------------------------
+|  -- PANEL ADMIN: GESTIÓN DE USUARIOS --
+|--------------------------------------------------------------------------
+*/
+Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureAdmin::class])->prefix('admin/users')->group(function () {
+
+    // Listar usuarios con stats de moderación (paginado, filtros ?q=&role=&status=)
+    Route::get('/', [AdminUserController::class, 'index'])
+        ->name('api.admin.users.index');
+
+    // Stats globales del panel (totales, bloqueados, flagged, denuncias pendientes)
+    Route::get('/stats', [AdminUserController::class, 'stats'])
+        ->name('api.admin.users.stats');
+
+    // Detalle de un usuario con historial de denuncias
+    Route::get('/{user}', [AdminUserController::class, 'show'])
+        ->name('api.admin.users.show');
+
+    // Cambiar rol de un usuario
+    Route::patch('/{user}/role', [AdminUserController::class, 'changeRole'])
+        ->withoutMiddleware(\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class)
+        ->name('api.admin.users.role');
+
+    // Listar denuncias (?status=pending|reviewed|dismissed|actioned &include_low_confidence=1)
+    Route::get('/reports/list', [AdminUserController::class, 'reports'])
+        ->name('api.admin.users.reports');
+
+    // Revisar una denuncia (dismissed / actioned / reviewed)
+    Route::patch('/reports/{report}/review', [AdminUserController::class, 'reviewReport'])
+        ->withoutMiddleware(\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class)
+        ->name('api.admin.users.reports.review');
 });
 
 /*

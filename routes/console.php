@@ -4,6 +4,7 @@ use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
 use App\Jobs\ImportFilmsJob;
+use App\Jobs\EnrichFilmAwardsJob;
 use App\Jobs\CheckNewsSourcesJob;
 use App\Jobs\ProcessNewsItemWithAIJob;
 use App\Jobs\FetchEventSourceJob;
@@ -16,22 +17,40 @@ Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
 
-// Importación automática de películas desde TMDB — 1 página por ejecución
-// Dividido en 3 días distintos para evitar timeouts en hosting compartido
-// (~20 películas + Wikidata por ejecución ≈ 5-10 min)
-Schedule::job(new ImportFilmsJob(now()->subYear()->year, now()->year, 1, 1))
-    ->weeklyOn(1, '10:00')  // Lunes   — página 1
-    ->name('import-films-page1')
+// ── Importación de películas desde TMDB (sin Wikidata) ────────────────────
+// Sin Wikidata: ~0.5s/película en lugar de ~5-8s → 5 páginas = ~100 películas en ~10-15 min
+// Cada job solo hace llamadas TMDB (discover + details+credits+external_ids+alternative_titles)
+
+// Lunes 10:00 — películas recientes (año actual + anterior), páginas 1-5
+Schedule::job(new ImportFilmsJob(now()->subYear()->year, now()->year, 1, 5))
+    ->weeklyOn(1, '10:00')
+    ->name('import-films-recent')
     ->withoutOverlapping();
 
-Schedule::job(new ImportFilmsJob(now()->subYear()->year, now()->year, 2, 2))
-    ->weeklyOn(3, '10:00')  // Miércoles — página 2
-    ->name('import-films-page2')
+// Miércoles 10:00 — películas 2018-2023, páginas 1-5
+Schedule::job(new ImportFilmsJob(2018, 2023, 1, 5))
+    ->weeklyOn(3, '10:00')
+    ->name('import-films-2018-2023')
     ->withoutOverlapping();
 
-Schedule::job(new ImportFilmsJob(now()->subYear()->year, now()->year, 3, 3))
-    ->weeklyOn(5, '10:00')  // Viernes  — página 3
-    ->name('import-films-page3')
+// Viernes 10:00 — películas 2010-2017, páginas 1-5
+Schedule::job(new ImportFilmsJob(2010, 2017, 1, 5))
+    ->weeklyOn(5, '10:00')
+    ->name('import-films-2010-2017')
+    ->withoutOverlapping();
+
+// Domingo 10:00 — clásicos 1990-2009, páginas 1-5
+Schedule::job(new ImportFilmsJob(1990, 2009, 1, 5))
+    ->weeklyOn(0, '10:00')
+    ->name('import-films-classics')
+    ->withoutOverlapping();
+
+// ── Enriquecimiento de awards/nominations/festivals desde Wikidata ─────────
+// 1 película por ejecución — nunca satura Wikidata, nunca provoca timeouts
+// Prioriza films con mayor vote_average. Se detiene solo cuando todos están procesados.
+Schedule::job(new EnrichFilmAwardsJob())
+    ->everyThreeMinutes()
+    ->name('enrich-film-awards')
     ->withoutOverlapping();
 
 // ── Panel Editorial IA ─────────────────────────────────────────────────────
