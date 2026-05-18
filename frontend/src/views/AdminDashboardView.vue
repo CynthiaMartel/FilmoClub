@@ -229,13 +229,29 @@ onUnmounted(() => {
           <h1 class="text-xl font-bold text-white">Gestión de Películas</h1>
           <p class="text-xs text-slate-500 mt-1">{{ total }} películas en la base de datos</p>
         </div>
-        <button
-          @click="goCreate"
-          class="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-[#00e054] text-[#14181c] text-sm font-bold hover:bg-[#00c94a] transition-colors flex-shrink-0"
-        >
-          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/></svg>
-          Añadir película
-        </button>
+        <div class="flex items-center gap-2 flex-shrink-0">
+          <button
+            @click="router.push({ name: 'admin-film-proposals' })"
+            class="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-neutral-800 text-slate-300 text-sm font-medium hover:bg-neutral-700 transition-colors"
+          >
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.069A1 1 0 0121 8.882V15a1 1 0 01-1.447.894L15 14M3 8a2 2 0 012-2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"/></svg>
+            Propuestas
+          </button>
+          <button
+            @click="router.push({ name: 'admin-users' })"
+            class="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-neutral-800 text-slate-300 text-sm font-medium hover:bg-neutral-700 transition-colors"
+          >
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a4 4 0 00-5-3.87M9 20H4v-2a4 4 0 015-3.87M16 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            Usuarios
+          </button>
+          <button
+            @click="goCreate"
+            class="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-[#00e054] text-[#14181c] text-sm font-bold hover:bg-[#00c94a] transition-colors"
+          >
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/></svg>
+            Añadir película
+          </button>
+        </div>
       </div>
 
       <!-- ── Monitor de importación ───────────────────────────────────── -->
