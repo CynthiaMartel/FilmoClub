@@ -93,6 +93,19 @@ class User extends Authenticatable
                     ->where('status', 'blocked');
     }
 
+    // Usuarios que me han bloqueado a mí (para stats de moderación)
+    public function blockedBy()
+    {
+        return $this->hasMany(UserFriend::class, 'followed_id')
+                    ->where('status', 'blocked');
+    }
+
+    // Denuncias recibidas (para moderación)
+    public function reportsReceived()
+    {
+        return $this->hasMany(\App\Models\UserReport::class, 'reported_user_id');
+    }
+
     // MÉTODOS DE ROL 
 
     // Verificar si el usuario tiene rol de Admin (en BD Admin tiene id = 1)
