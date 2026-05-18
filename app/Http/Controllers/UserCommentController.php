@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\UserComment;
 use App\Models\UserEntry;
+use App\Models\UserFriend;
 use App\Models\Film;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -11,21 +12,25 @@ use Illuminate\Http\JsonResponse;
 
 class UserCommentController extends Controller
 {
-    // MOSTRAR comentarios de un film o una entry por IdFilm o o id de la entrada
-     
     public function index(string $type, int $id): JsonResponse
     {
+        $authUser = Auth::user();
         $modelClass = $this->resolveModel($type);
 
         if (!$modelClass) {
             return response()->json(['error' => 'Tipo de entidad no válido.'], 400);
         }
 
-        $comments = UserComment::where('commentable_type', $modelClass)
+        $query = UserComment::where('commentable_type', $modelClass)
             ->where('commentable_id', $id)
             ->with(['user:id,name', 'user.profile:user_id,avatar'])
-            ->orderBy('created_at', 'desc')
-            ->get();
+            ->orderBy('created_at', 'desc');
+
+        if ($authUser) {
+            $query->withExists(['likes as i_liked' => fn($q) => $q->where('user_id', $authUser->id)]);
+        }
+
+        $comments = $query->get();
 
         return response()->json([
             'success' => true,
@@ -34,8 +39,6 @@ class UserCommentController extends Controller
         ], 200);
     }
 
-    //CREAR nuevo comentario en un film o una entry por IdFilm o o id de la entrada
-     
     public function store(Request $request, string $type, int $id): JsonResponse
     {
         $user = Auth::user();
@@ -59,6 +62,7 @@ class UserCommentController extends Controller
         ]);
 
         $comment->load(['user:id,name', 'user.profile:user_id,avatar']);
+        $comment->i_liked = false;
 
         return response()->json([
             'success' => true,
@@ -67,8 +71,6 @@ class UserCommentController extends Controller
         ], 201);
     }
 
-    // ELIMINAR comentario por ID del comentario (usuario logueado o admin)
-    
     public function destroy(int $commentId): JsonResponse
     {
         $user = Auth::user();
@@ -86,18 +88,62 @@ class UserCommentController extends Controller
         ], 200);
     }
 
+    public function toggleLike(int $commentId): JsonResponse
+    {
+        $comment = UserComment::findOrFail($commentId);
+        return response()->json($comment->toggleLike(Auth::id()));
+    }
 
-    // Para modelo polimórfico según el tipo recibido en los otros métodos anteriores (film o entry)
-    
+    public function communityFilmComments(): JsonResponse
+    {
+        $userId = Auth::id();
+
+        $followedIds = UserFriend::where('follower_id', $userId)
+            ->where('status', 'accepted')
+            ->pluck('followed_id');
+
+        if ($followedIds->isEmpty()) {
+            return response()->json(['data' => []]);
+        }
+
+        $comments = UserComment::whereIn('user_id', $followedIds)
+            ->where('commentable_type', Film::class)
+            ->whereIn('visibility', ['public', 'friends'])
+            ->where('status', 'approved')
+            ->whereHas('commentable')
+            ->with(['user:id,name', 'user.profile:user_id,avatar', 'commentable'])
+            ->withExists(['likes as i_liked' => fn($q) => $q->where('user_id', $userId)])
+            ->orderBy('created_at', 'desc')
+            ->take(8)
+            ->get();
+
+        $data = $comments->map(fn($c) => [
+            'id'          => $c->id,
+            'comment'     => $c->comment,
+            'likes_count' => $c->likes_count,
+            'i_liked'     => (bool) $c->i_liked,
+            'created_at'  => $c->created_at,
+            'user'        => [
+                'id'      => $c->user->id,
+                'name'    => $c->user->name,
+                'profile' => ['avatar' => $c->user->profile->avatar ?? null],
+            ],
+            'film'        => [
+                'idFilm' => $c->commentable->idFilm,
+                'title'  => $c->commentable->title,
+                'frame'  => $c->commentable->frame,
+            ],
+        ]);
+
+        return response()->json(['data' => $data]);
+    }
+
     private function resolveModel(string $type): ?string
     {
         return match ($type) {
-            'film' => Film::class,
+            'film'  => Film::class,
             'entry' => UserEntry::class,
             default => null,
         };
     }
 }
-
-
-

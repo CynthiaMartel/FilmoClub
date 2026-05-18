@@ -152,31 +152,9 @@ class UserEntryController extends Controller
      
     public function toggleLike($entryId): JsonResponse
     {
-        $user = Auth::user();
         $entry = UserEntry::findOrFail($entryId);
-
-        $like = UserEntryLike::where('user_entry_id', $entryId)
-            ->where('user_id', $user->id)
-            ->first();
-
-        if ($like) {
-            $like->delete();
-            $entry->decrement('likes_count');
-            $message = 'Like eliminado.';
-        } else {
-            UserEntryLike::create([
-                'user_entry_id' => $entryId,
-                'user_id' => $user->id,
-            ]);
-            $entry->increment('likes_count');
-            $message = 'Like añadido.';
-        }
-
-        return response()->json([
-            'success' => true,
-            'message' => $message,
-            'likes_count' => $entry->likes_count,
-        ], 200);
+        $result = $entry->toggleLike(Auth::id());
+        return response()->json(['success' => true, ...$result]);
     }
 
     // ACTUALIZAR una entrada existente (solo el dueño o admin)

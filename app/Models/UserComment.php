@@ -2,12 +2,13 @@
 
 namespace App\Models;
 
+use App\Traits\Likeable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class UserComment extends Model
 {
-    use HasFactory;
+    use HasFactory, Likeable;
 
     protected $fillable = [
         'user_id',
@@ -16,6 +17,7 @@ class UserComment extends Model
         'comment',
         'visibility',
         'status',
+        'likes_count',
     ];
 
     public function user()
@@ -26,6 +28,11 @@ class UserComment extends Model
     public function commentable()
     {
         return $this->morphTo();
+    }
+
+    public function likes()
+    {
+        return $this->hasMany(UserCommentLike::class, 'comment_id');
     }
 }
 
