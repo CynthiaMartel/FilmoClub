@@ -17,7 +17,7 @@
     "generate-pwa-assets": "pwa-assets-generator"
   },
   "dependencies": {
-    "axios": "^1.13.2",
+    "axios": "^1.16.0",
     "dompurify": "^3.4.2",
     "pinia": "^3.0.4",
     "vue": "^3.5.25",
