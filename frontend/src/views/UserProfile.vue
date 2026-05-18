@@ -28,16 +28,60 @@ const savedLists = ref([])
 const userReviews = ref([])
 const userDiary = ref([])
 const userWatchlist = ref([])
+const userProposals  = ref([])
+const proposalsOpen  = ref(false)
 
 // --- VARIABLES SOCIALES ---
 const followers = ref([])
 const followings = ref([])
+const socialModalOpen = ref(false)
+const socialModalType = ref('followers') // 'followers' | 'followings'
 const isMenuOpen = ref(false)
 const isBlocking = ref(false)
 const isBlockedListOpen = ref(false)
 const blockedUsers = ref([])
 const isLoadingBlocked = ref(false)
 const unblockingId = ref(null)
+
+// --- DENUNCIA ---
+const reportModalOpen   = ref(false)
+const reportCategory    = ref('')
+const reportReason      = ref('')
+const reportSubmitting  = ref(false)
+const reportDone        = ref(false)
+
+const REPORT_CATEGORIES = [
+  { value: 'spam',                  label: 'Spam' },
+  { value: 'harassment',            label: 'Acoso o amenazas' },
+  { value: 'inappropriate_content', label: 'Contenido inapropiado' },
+  { value: 'impersonation',         label: 'Suplantación de identidad' },
+  { value: 'other',                 label: 'Otro' },
+]
+
+function openReportModal() {
+  reportCategory.value   = ''
+  reportReason.value     = ''
+  reportDone.value       = false
+  reportModalOpen.value  = true
+  isMenuOpen.value       = false
+}
+
+async function submitReport() {
+  if (!reportCategory.value) return
+  const profileId = user_profiles.value?.user_id
+  reportSubmitting.value = true
+  try {
+    await api.post(`/users/${profileId}/report`, {
+      category: reportCategory.value,
+      reason:   reportReason.value || null,
+    })
+    reportDone.value = true
+  } catch (e) {
+    alert(e?.response?.data?.message || 'Error al enviar la denuncia.')
+  } finally {
+    reportSubmitting.value = false
+  }
+}
 
 // --- PAGINACIÓN de diary --
 const diaryPage = ref(1)
@@ -121,6 +165,16 @@ const loadMoreDiary = () => {
     if (diaryPage.value < diaryLastPage.value) {
         fetchUserDiary(diaryPage.value + 1, true)
     }
+}
+
+// 4b. Cargar propuestas de película (solo perfil propio)
+const fetchUserProposals = async () => {
+  try {
+    const { data } = await api.get('/film-proposals/mine')
+    userProposals.value = data.data || []
+  } catch {
+    userProposals.value = []
+  }
 }
 
 // 4. Cargar WATCHLIST
@@ -250,6 +304,18 @@ const goToProfile = (username) => {
     router.push({ name: 'user-profile', params: { username } })
 }
 
+const openSocialModal = (type) => {
+    socialModalType.value = type
+    socialModalOpen.value = true
+}
+
+const socialModalList = computed(() =>
+    socialModalType.value === 'followers' ? followers.value : followings.value
+)
+
+const followersPreview = computed(() => followers.value.slice(0, 3))
+const followingsPreview = computed(() => followings.value.slice(0, 3))
+
 // Obtener inicial para el avatar con inicial del nombre del user
 const getInitial = (name) => {
     return name ? name.charAt(0).toUpperCase() : '?'
@@ -267,15 +333,20 @@ const loadAll = async () => {
   diaryPage.value = 1
   
   try {
-    await Promise.all([
-      fetchProfile(), 
-      fetchUserStats(), 
-      fetchUserEntries(), 
+    const promises = [
+      fetchProfile(),
+      fetchUserStats(),
+      fetchUserEntries(),
       fetchSavedLists(),
       fetchUserDiary(1, false),
       fetchUserWatchlist(),
-      fetchSocials() 
-    ])
+      fetchSocials(),
+    ]
+    // Proposals only fetched for own profile
+    if (auth.user && auth.user.name === route.params.username) {
+      promises.push(fetchUserProposals())
+    }
+    await Promise.all(promises)
   } catch (err) {
     error.value = "No se pudo cargar el perfil"
   } finally {
@@ -451,7 +522,7 @@ onMounted(loadAll)
             {{ user_profiles.bio || ' ' }}
           </div>
 
-          <div v-if="auth.user && auth.user.id !== user_profiles.user.id" class="mt-6 flex justify-center md:justify-start">
+          <div v-if="auth.user && auth.user.id !== user_profiles.user.id" class="mt-6 flex justify-center sm:justify-start">
             <button
               @click="toggleFollow"
               :disabled="savingFollow"
@@ -471,15 +542,15 @@ onMounted(loadAll)
       </header>
 
       <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-16">
-        
-        <div class="lg:col-span-8 flex flex-col gap-10 order-2 lg:order-1">
+
+        <div class="lg:col-span-8 flex flex-col gap-10">
           
           <section v-if="userData_fromFilmsActions" class="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-4 border-y border-slate-800 py-4 sm:py-6">
              <div class="text-center border-r border-slate-800/30">
                <p class="text-2xl md:text-3xl font-black text-white">{{ userData_fromFilmsActions.stats.films_seen }}</p>
                <p class="text-[9px] md:text-[10px] uppercase tracking-widest font-bold text-slate-500">Películas</p>
              </div>
-             <div class="text-center border-r border-slate-800/30">
+             <div class="text-center md:border-r border-slate-800/30">
                <p class="text-2xl md:text-3xl font-black text-white">{{ userData_fromFilmsActions.stats.films_seen_this_year }}</p>
                <p class="text-[9px] md:text-[10px] uppercase tracking-widest font-bold text-slate-500">Este año</p>
              </div>
@@ -599,9 +670,9 @@ onMounted(loadAll)
 
         </div>
 
-        <aside class="lg:col-span-4 flex flex-col gap-10 order-1 lg:order-2">
+        <aside class="lg:col-span-4 flex flex-col gap-10">
           
-          <section class="bg-slate-900/20 p-6 rounded-2xl border border-slate-800/50 relative">
+          <section class="bg-slate-900/20 p-4 sm:p-6 rounded-2xl border border-slate-800/50 relative">
              <div class="flex items-center justify-between mb-4 border-b border-slate-800 pb-2">
                 <h2 class="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 italic">Comunidad</h2>
                 
@@ -620,6 +691,12 @@ onMounted(loadAll)
                       >
                          {{ isBlocking ? 'Bloqueando...' : 'Bloquear usuario' }}
                       </button>
+                      <button
+                        @click="openReportModal"
+                        class="w-full text-left px-4 py-3 text-[10px] uppercase font-bold text-orange-400 hover:bg-slate-800 transition-colors border-t border-slate-700/50"
+                      >
+                        Denunciar usuario
+                      </button>
                    </div>
                 </div>
 
@@ -636,80 +713,95 @@ onMounted(loadAll)
                 </button>
              </div>
 
-             <div class="grid grid-cols-2 gap-4 h-auto max-h-[300px]">
-                
-                <div class="flex flex-col h-full bg-slate-900/30 rounded p-2">
+             <div class="grid grid-cols-2 gap-3 sm:gap-4">
+
+                <!-- FOLLOWERS -->
+                <div class="flex flex-col bg-slate-900/30 rounded p-2 sm:p-3">
                     <div class="text-center mb-3 border-b border-slate-800 pb-2">
                          <p class="text-xl font-black text-white">{{ followers.length }}</p>
                          <p class="text-[8px] uppercase tracking-widest text-slate-500 font-bold">Followers</p>
                     </div>
 
-                    <div class="overflow-y-auto brand-scroll pr-1 flex-grow">
-                        <div class="grid grid-cols-3 gap-2 justify-items-center px-1 py-1">
-                           <div
-                              v-for="user in followers"
-                              :key="user.id"
-                              @click="goToProfile(user.name)"
-                              class="flex flex-col items-center gap-1 group cursor-pointer w-full"
-                            >
-                                <div class="w-9 h-9 flex-shrink-0 rounded-full overflow-hidden border border-slate-700 shadow-sm group-hover:ring-2 group-hover:ring-brand transition-all">
-                                    <img
-                                      v-if="avatarUrl(user.avatar || user.profile?.avatar)"
-                                      :src="avatarUrl(user.avatar || user.profile?.avatar)"
-                                      class="w-full h-full object-cover"
-                                    />
-                                    <div v-else class="w-full h-full bg-slate-700 flex items-center justify-center">
-                                       <span class="text-[10px] font-bold text-white select-none">{{ getInitial(user.name) }}</span>
-                                    </div>
+                    <div class="grid grid-cols-3 gap-2 justify-items-center px-1 py-1">
+                       <div
+                          v-for="user in followersPreview"
+                          :key="user.id"
+                          @click="goToProfile(user.name)"
+                          class="flex flex-col items-center gap-1 group cursor-pointer w-full"
+                        >
+                            <div class="w-10 h-10 lg:w-9 lg:h-9 flex-shrink-0 rounded-full overflow-hidden border border-slate-700 shadow-sm group-hover:ring-2 group-hover:ring-brand transition-all">
+                                <img
+                                  v-if="avatarUrl(user.avatar)"
+                                  :src="avatarUrl(user.avatar)"
+                                  class="w-full h-full object-cover"
+                                />
+                                <div v-else class="w-full h-full bg-slate-700 flex items-center justify-center">
+                                   <span class="text-[10px] font-bold text-white select-none">{{ getInitial(user.name) }}</span>
                                 </div>
-                                <p class="text-[8px] font-bold text-slate-400 group-hover:text-white truncate w-full text-center">{{ user.name }}</p>
                             </div>
-                        </div>
-
-                        <div v-if="followers.length === 0" class="text-center mt-4">
-                           <p class="text-[8px] text-slate-600 italic">Nadie por aquí.</p>
+                            <p class="text-[8px] font-bold text-slate-400 group-hover:text-white truncate w-full text-center leading-tight">{{ user.name }}</p>
                         </div>
                     </div>
+
+                    <div v-if="followers.length === 0" class="text-center mt-2">
+                       <p class="text-[8px] text-slate-600 italic">Nadie por aquí.</p>
+                    </div>
+
+                    <button
+                      v-if="followers.length > 3"
+                      @click="openSocialModal('followers')"
+                      class="mt-3 w-full text-[8px] font-black uppercase tracking-widest text-slate-500 hover:text-brand transition-colors text-center py-2 border-t border-slate-800"
+                    >
+                      Ver todos ({{ followers.length }})
+                    </button>
                 </div>
 
-                <div class="flex flex-col h-full bg-slate-900/30 rounded p-2">
+                <!-- FOLLOWING -->
+                <div class="flex flex-col bg-slate-900/30 rounded p-2 sm:p-3">
                     <div class="text-center mb-3 border-b border-slate-800 pb-2">
                          <p class="text-xl font-black text-white">{{ followings.length }}</p>
                          <p class="text-[8px] uppercase tracking-widest text-slate-500 font-bold">Following</p>
                     </div>
 
-                    <div class="overflow-y-auto brand-scroll pr-1 flex-grow">
-                        <div class="grid grid-cols-3 gap-2 justify-items-center px-1 py-1">
-                           <div
-                              v-for="user in followings"
-                              :key="user.id"
-                              @click="goToProfile(user.name)"
-                              class="flex flex-col items-center gap-1 group cursor-pointer w-full"
-                            >
-                                <div class="w-9 h-9 flex-shrink-0 rounded-full overflow-hidden border border-slate-700 shadow-sm group-hover:ring-2 group-hover:ring-brand transition-all">
-                                    <img
-                                      v-if="avatarUrl(user.avatar || user.profile?.avatar)"
-                                      :src="avatarUrl(user.avatar || user.profile?.avatar)"
-                                      class="w-full h-full object-cover"
-                                    />
-                                    <div v-else class="w-full h-full bg-slate-700 flex items-center justify-center">
-                                       <span class="text-[10px] font-bold text-white select-none">{{ getInitial(user.name) }}</span>
-                                    </div>
+                    <div class="grid grid-cols-3 gap-2 justify-items-center px-1 py-1">
+                       <div
+                          v-for="user in followingsPreview"
+                          :key="user.id"
+                          @click="goToProfile(user.name)"
+                          class="flex flex-col items-center gap-1 group cursor-pointer w-full"
+                        >
+                            <div class="w-10 h-10 lg:w-9 lg:h-9 flex-shrink-0 rounded-full overflow-hidden border border-slate-700 shadow-sm group-hover:ring-2 group-hover:ring-brand transition-all">
+                                <img
+                                  v-if="avatarUrl(user.avatar)"
+                                  :src="avatarUrl(user.avatar)"
+                                  class="w-full h-full object-cover"
+                                />
+                                <div v-else class="w-full h-full bg-slate-700 flex items-center justify-center">
+                                   <span class="text-[10px] font-bold text-white select-none">{{ getInitial(user.name) }}</span>
                                 </div>
-                                <p class="text-[8px] font-bold text-slate-400 group-hover:text-white truncate w-full text-center">{{ user.name }}</p>
                             </div>
-                        </div>
-
-                        <div v-if="followings.length === 0" class="text-center mt-4">
-                           <p class="text-[8px] text-slate-600 italic">Sin seguidos.</p>
+                            <p class="text-[8px] font-bold text-slate-400 group-hover:text-white truncate w-full text-center leading-tight">{{ user.name }}</p>
                         </div>
                     </div>
+
+                    <div v-if="followings.length === 0" class="text-center mt-2">
+                       <p class="text-[8px] text-slate-600 italic">Sin seguidos.</p>
+                    </div>
+
+                    <button
+                      v-if="followings.length > 3"
+                      @click="openSocialModal('followings')"
+                      class="mt-3 w-full text-[8px] font-black uppercase tracking-widest text-slate-500 hover:text-brand transition-colors text-center py-2 border-t border-slate-800"
+                    >
+                      Ver todos ({{ followings.length }})
+                    </button>
                 </div>
+
              </div>
 
           </section>
 
-          <section class="bg-slate-900/20 p-6 rounded-2xl border border-slate-800/50">
+          <section class="bg-slate-900/20 p-4 sm:p-6 rounded-2xl border border-slate-800/50">
             <div class="flex items-center justify-between mb-8 border-b border-slate-800 pb-2">
               <h2 class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-400/80 italic w-full text-center">Filmoteca Visionada</h2>
             </div>
@@ -787,13 +879,13 @@ onMounted(loadAll)
             </div>
           </section>
 
-          <section class="bg-slate-900/20 p-6 rounded-2xl border border-slate-800/50">
+          <section class="bg-slate-900/20 p-4 sm:p-6 rounded-2xl border border-slate-800/50">
              <div class="flex items-center justify-between mb-4 border-b border-slate-800 pb-2">
               <h2 class="text-[10px] font-bold uppercase tracking-[0.2em] text-blue-400 italic">Watchlist</h2>
               <span class="text-[9px] font-bold text-slate-500">{{ userWatchlist.length }} FILMS</span>
             </div>
             
-            <div v-if="userWatchlist.length > 0" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+            <div v-if="userWatchlist.length > 0" class="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-3 gap-2">
                 <div 
                   v-for="item in userWatchlist.slice(0, 16)" 
                   :key="item.id" 
@@ -802,7 +894,7 @@ onMounted(loadAll)
                 >
                     <img :src="item.film.frame || '/default-poster.webp'" class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" loading="lazy" />
                 </div>
-                <div v-if="userWatchlist.length > 16" class="col-span-4 text-center pt-2">
+                <div v-if="userWatchlist.length > 16" class="col-span-full text-center pt-2">
                    <p class="text-[8px] text-slate-500 italic">+ {{ userWatchlist.length - 16 }} más...</p>
                 </div>
             </div>
@@ -810,6 +902,62 @@ onMounted(loadAll)
                <p class="text-[8px] text-slate-600 italic">Lista vacía.</p>
             </div>
           </section>
+
+          <!-- Mis propuestas (solo perfil propio, colapsable) -->
+          <div v-if="auth.user && auth.user.id === user_profiles?.user?.id">
+            <button
+              @click="proposalsOpen = !proposalsOpen"
+              class="w-full flex items-center justify-between px-3 py-2 rounded-xl border border-slate-800/60 bg-slate-900/20 hover:border-slate-700 transition-colors group"
+            >
+              <span class="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500 group-hover:text-slate-400 transition-colors">
+                Películas propuestas a filmoclub
+                <span v-if="userProposals.length" class="ml-1 text-slate-600">({{ userProposals.length }})</span>
+              </span>
+              <svg
+                class="w-3 h-3 text-slate-600 transition-transform duration-200"
+                :class="proposalsOpen ? 'rotate-180' : ''"
+                fill="none" viewBox="0 0 24 24" stroke="currentColor"
+              >
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"/>
+              </svg>
+            </button>
+
+            <div v-if="proposalsOpen" class="mt-2 px-3 py-3 rounded-xl border border-slate-800/40 bg-slate-900/10 space-y-3">
+              <div v-if="userProposals.length > 0">
+                <div
+                  v-for="proposal in userProposals.slice(0, 5)"
+                  :key="proposal.id"
+                  class="flex items-center gap-3 py-1.5"
+                >
+                  <img
+                    v-if="proposal.tmdb_snapshot?.poster"
+                    :src="proposal.tmdb_snapshot.poster"
+                    :alt="proposal.tmdb_snapshot?.title"
+                    class="w-7 h-10 object-cover rounded flex-shrink-0"
+                  />
+                  <div v-else class="w-7 h-10 rounded bg-slate-800 flex-shrink-0" />
+                  <div class="flex-1 min-w-0">
+                    <p class="text-[10px] font-semibold text-slate-300 truncate">{{ proposal.tmdb_snapshot?.title }}</p>
+                    <p class="text-[8px] text-slate-600">{{ proposal.tmdb_snapshot?.year }}</p>
+                  </div>
+                  <span :class="[
+                    'text-[7px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-full flex-shrink-0',
+                    proposal.status === 'pending'  ? 'bg-amber-500/15 text-amber-500' :
+                    proposal.status === 'approved' ? 'bg-emerald-500/15 text-emerald-500' :
+                    'bg-red-500/15 text-red-400'
+                  ]">
+                    {{ proposal.status === 'pending' ? 'Pendiente' : proposal.status === 'approved' ? 'Aprobada' : 'Rechazada' }}
+                  </span>
+                </div>
+                <p v-if="userProposals.length > 5" class="text-[8px] text-slate-600 italic text-center pt-1">
+                  + {{ userProposals.length - 5 }} más
+                </p>
+              </div>
+              <p v-else class="text-[8px] text-slate-600 italic text-center py-2">
+                Aún no has propuesto ninguna película.
+              </p>
+            </div>
+          </div>
 
         </aside>
 
@@ -824,6 +972,57 @@ onMounted(loadAll)
       :initialData="user_profiles"
       @updated="loadAll"
     />
+
+    <!-- Modal: Followers / Followings -->
+    <Teleport to="body">
+      <Transition name="fade">
+        <div v-if="socialModalOpen" class="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div class="absolute inset-0 bg-slate-950/90 backdrop-blur-md" @click="socialModalOpen = false" />
+          <div class="relative bg-[#1b2228] border border-white/10 w-full max-w-sm rounded-xl shadow-2xl overflow-hidden">
+
+            <div class="flex items-center justify-between px-6 py-4 border-b border-white/5">
+              <h3 class="text-[11px] font-black text-white uppercase tracking-[0.2em]">
+                {{ socialModalType === 'followers' ? 'Followers' : 'Following' }}
+                <span class="text-slate-500 ml-1">({{ socialModalList.length }})</span>
+              </h3>
+              <button @click="socialModalOpen = false" class="text-slate-500 hover:text-white transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="w-4 h-4">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12"/>
+                </svg>
+              </button>
+            </div>
+
+            <div class="p-4 flex flex-col gap-2 max-h-[60vh] overflow-y-auto brand-scroll">
+              <div v-if="socialModalList.length === 0" class="py-8 text-center">
+                <p class="text-[10px] text-slate-500 uppercase tracking-widest font-bold italic">
+                  {{ socialModalType === 'followers' ? 'Nadie te sigue aún.' : 'No sigues a nadie aún.' }}
+                </p>
+              </div>
+              <div
+                v-else
+                v-for="(user, idx) in socialModalList"
+                :key="user.id"
+                @click="socialModalOpen = false; goToProfile(user.name)"
+                class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-white/[0.02] border border-white/5 hover:border-brand/30 hover:bg-white/[0.04] cursor-pointer transition-all group"
+              >
+                <div class="w-8 h-8 rounded-full bg-slate-700 border border-slate-600 overflow-hidden flex-shrink-0 flex items-center justify-center">
+                  <img v-if="avatarUrl(user.avatar)" :src="avatarUrl(user.avatar)" class="w-full h-full object-cover" />
+                  <span v-else class="text-[10px] font-bold text-white select-none">{{ getInitial(user.name) }}</span>
+                </div>
+                <div class="flex-1 min-w-0">
+                  <p class="text-[11px] font-bold text-slate-300 group-hover:text-white truncate transition-colors">{{ user.name }}</p>
+                  <p v-if="user.followed_at" class="text-[8px] text-slate-600 mt-0.5">
+                    {{ new Date(user.followed_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' }) }}
+                  </p>
+                </div>
+                <span class="text-[8px] font-black text-slate-600 group-hover:text-brand transition-colors">#{{ idx + 1 }}</span>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
 
     <!-- Modal: Lista de usuarios bloqueados -->
     <Teleport to="body">
@@ -878,6 +1077,64 @@ onMounted(loadAll)
 
     <LoginModal v-model="isLoginOpen" />
   </div>
+
+  <!-- ── Modal denuncia ──────────────────────────────────────────────────── -->
+  <Transition name="fade">
+    <div v-if="reportModalOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm px-4">
+      <div class="bg-[#1c2128] border border-slate-700 rounded-xl p-6 max-w-sm w-full">
+
+        <!-- Confirmación enviado -->
+        <div v-if="reportDone" class="text-center py-4">
+          <p class="text-2xl mb-2">✓</p>
+          <p class="text-white font-semibold mb-1">Denuncia enviada</p>
+          <p class="text-slate-400 text-sm mb-5">El equipo de moderación la revisará. Gracias por contribuir a una comunidad sana.</p>
+          <button @click="reportModalOpen = false" class="px-5 py-2 bg-slate-700 text-white text-sm rounded-lg hover:bg-slate-600">Cerrar</button>
+        </div>
+
+        <!-- Formulario -->
+        <template v-else>
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="text-base font-semibold text-white">Denunciar usuario</h3>
+            <button @click="reportModalOpen = false" class="text-slate-500 hover:text-white text-xl leading-none">×</button>
+          </div>
+
+          <p class="text-slate-400 text-xs mb-4">Tu denuncia es anónima. Úsala solo si crees que este usuario está infringiendo las normas de la comunidad.</p>
+
+          <div class="flex flex-col gap-2 mb-4">
+            <button
+              v-for="cat in REPORT_CATEGORIES"
+              :key="cat.value"
+              @click="reportCategory = cat.value"
+              :class="['w-full text-left px-3 py-2.5 rounded-lg text-sm border transition-colors', reportCategory === cat.value ? 'border-orange-500 bg-orange-950/40 text-orange-300' : 'border-slate-700 text-slate-300 hover:border-slate-500']"
+            >
+              {{ cat.label }}
+            </button>
+          </div>
+
+          <textarea
+            v-model="reportReason"
+            placeholder="Descripción adicional (opcional)…"
+            maxlength="500"
+            rows="2"
+            class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-slate-500 resize-none mb-4"
+          />
+
+          <div class="flex gap-3 justify-end">
+            <button @click="reportModalOpen = false" class="px-4 py-2 text-sm text-slate-400 hover:text-white transition-colors">Cancelar</button>
+            <button
+              @click="submitReport"
+              :disabled="!reportCategory || reportSubmitting"
+              class="px-5 py-2 bg-orange-600 text-white text-sm rounded-lg font-medium hover:bg-orange-500 disabled:opacity-40 transition-colors"
+            >
+              {{ reportSubmitting ? 'Enviando…' : 'Enviar denuncia' }}
+            </button>
+          </div>
+        </template>
+
+      </div>
+    </div>
+  </Transition>
+
 </template>
 
 <style scoped>
