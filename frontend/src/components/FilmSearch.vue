@@ -35,15 +35,53 @@
           </div>
         </div>
       </button>
+
+      <!-- Propose trigger inside dropdown -->
+      <div v-if="showPropose" class="px-4 py-3 border-t border-slate-800/50">
+        <button
+          type="button"
+          @click="proposeOpen = true; isSearchOpen = false"
+          class="text-xs text-slate-500 hover:text-brand transition-colors"
+        >
+          ¿No encuentras lo que buscas?
+          <span class="underline underline-offset-2">Proponla aquí</span>
+        </button>
+      </div>
     </div>
+
+    <!-- Propose trigger when search has text but no results -->
+    <div
+      v-else-if="isSearchOpen && showPropose && searchQuery.trim().length >= 2 && !isSearching && !searchResults.length"
+      class="absolute mt-3 w-full rounded-2xl border border-slate-800 bg-[#1e2227]/95 backdrop-blur-xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] z-[100] animate-fade-in"
+    >
+      <div class="px-4 py-4 text-center space-y-2">
+        <p class="text-xs text-slate-500">No encontramos «{{ searchQuery.trim() }}» en nuestra base de datos.</p>
+        <button
+          type="button"
+          @click="proposeOpen = true; isSearchOpen = false"
+          class="text-xs text-brand hover:text-brand/80 transition-colors underline underline-offset-2"
+        >
+          Proponer esta película
+        </button>
+      </div>
+    </div>
+
+    <ProposeFilmModal v-model="proposeOpen" />
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
 import api from '@/services/api'
+import ProposeFilmModal from '@/components/ProposeFilmModal.vue'
+
+const props = defineProps({
+  showPropose: { type: Boolean, default: true },
+})
 
 const emit = defineEmits(['select-film'])
+
+const proposeOpen = ref(false)
 
 const searchQuery = ref('')
 const searchResults = ref([])
@@ -68,13 +106,13 @@ const fetchSearch = () => {
     try {
       const { data } = await api.get('/films/search', { params: { q } })
       searchResults.value = data.data || data
-      isSearchOpen.value = true
     } catch (e) {
       searchResults.value = []
     } finally {
       isSearching.value = false
+      isSearchOpen.value = true
     }
-  }, 400) 
+  }, 400)
 }
 
 const selectFilm = (film) => {
