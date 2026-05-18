@@ -316,6 +316,7 @@ import EntryHeader from '@/components/EntryHeader.vue';
 import MovieGrid from '@/components/MovieGrid.vue';
 import CommentSection from '@/components/CommentSection.vue';
 import LoginModal from '@/components/LoginModal.vue';
+import { useLikeToggle } from '@/composables/useLikeToggle';
 
 const route = useRoute();
 const router = useRouter();
@@ -393,19 +394,14 @@ const toggleSaveList = async () => {
 };
 
 
+const { toggle: likeToggle } = useLikeToggle('/user_entries')
+
 const toggleLike = async () => {
   if (!entry.value || savingLike.value) return;
-  
   savingLike.value = true;
   try {
-    const { data } = await api.post(`/user_entries/${entry.value.id}/like`);
-    
-    likeSaved.value = !likeSaved.value;
-
-    if (entry.value && data.likes_count !== undefined) {
-      entry.value.likes_count = data.likes_count;
-    }
-
+    const data = await likeToggle(entry.value)
+    likeSaved.value = data.i_liked
   } catch (e) {
     console.error("Error en like dar/quitar", e);
   } finally {

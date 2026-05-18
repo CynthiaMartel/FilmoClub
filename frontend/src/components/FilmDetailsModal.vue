@@ -134,7 +134,7 @@ const cleanList = (data) => {
   <div v-if="modelValue" class="fixed inset-0 z-[100] flex items-center justify-center p-4 backdrop-blur-md">
     <div class="absolute inset-0 bg-slate-950/40" @click="close"></div>
 
-    <div class="bg-slate-900 border border-slate-800 w-full max-w-4xl rounded-3xl shadow-2xl overflow-hidden max-h-[94vh] flex flex-col relative transition-all">
+    <div class="bg-[#1b2228] border border-slate-700/50 w-full max-w-4xl rounded-3xl shadow-2xl overflow-hidden max-h-[94vh] flex flex-col relative transition-all">
       
       <div class="p-5 md:p-6 border-b border-slate-800 flex justify-between items-center bg-[#1b2228] z-20">
         <div class="min-w-0 flex-1">
@@ -160,10 +160,10 @@ const cleanList = (data) => {
         </button>
       </div>
 
-      <div class="overflow-y-auto relative flex-1 custom-scrollbar bg-slate-900">
+      <div class="overflow-y-auto relative flex-1 custom-scrollbar bg-[#1b2228]">
         <div class="absolute inset-0 z-0 pointer-events-none">
-          <img v-if="backdropUrl" :src="backdropUrl" class="w-full h-full object-cover opacity-30" />
-          <div class="absolute inset-0 bg-gradient-to-b from-slate-900/80 via-slate-900/95 to-slate-900"></div>
+          <img v-if="backdropUrl" :src="backdropUrl" class="w-full h-full object-cover opacity-20" />
+          <div class="absolute inset-0 bg-gradient-to-b from-[#1b2228]/80 via-[#1b2228]/95 to-[#1b2228]"></div>
         </div>
 
         <div class="relative z-10">
@@ -185,7 +185,7 @@ const cleanList = (data) => {
 
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 flex-1 w-full text-left">
               <!-- Lanzamiento -->
-              <div class="bg-slate-900/60 backdrop-blur-md p-5 rounded-2xl border border-white/10 col-span-full shadow-lg">
+              <div class="bg-[#14181c]/60 backdrop-blur-md p-5 rounded-2xl border border-white/10 col-span-full shadow-lg">
                 <span class="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Fecha de estreno</span>
                 <div class="flex flex-wrap items-baseline gap-2">
                   <span class="text-3xl text-white font-black leading-none">{{ filmYear }}</span>
@@ -194,7 +194,7 @@ const cleanList = (data) => {
               </div>
 
               <!-- Datos de origen -->
-              <div class="bg-slate-900/60 backdrop-blur-md p-5 rounded-2xl border border-white/10 col-span-full shadow-lg space-y-4">
+              <div class="bg-[#14181c]/60 backdrop-blur-md p-5 rounded-2xl border border-white/10 col-span-full shadow-lg space-y-4">
                 <span class="block text-[10px] text-slate-400 font-bold uppercase tracking-wider">Datos de origen</span>
 
                 <div v-if="film.original_title" class="flex flex-col gap-0.5">
@@ -229,12 +229,12 @@ const cleanList = (data) => {
                 </div>
               </div>
 
-              <div class="bg-slate-900/60 backdrop-blur-md p-5 rounded-2xl border border-white/10 shadow-lg">
+              <div class="bg-[#14181c]/60 backdrop-blur-md p-5 rounded-2xl border border-white/10 shadow-lg">
                 <span class="block text-[9px] text-slate-500 font-black uppercase tracking-widest mb-1">Duración</span>
                 <span class="text-xl text-white font-black">{{ filmDuration || 'N/A' }}</span>
               </div>
 
-              <div class="bg-slate-900/60 backdrop-blur-md p-5 rounded-2xl border border-white/10 shadow-lg">
+              <div class="bg-[#14181c]/60 backdrop-blur-md p-5 rounded-2xl border border-white/10 shadow-lg">
                 <span class="block text-[9px] text-slate-500 font-black uppercase tracking-widest mb-2">Géneros</span>
                 <div class="flex flex-wrap gap-1.5">
                   <span v-for="g in (film.genre?.split(',') || [])" :key="g" 
@@ -261,7 +261,7 @@ const cleanList = (data) => {
           </div>
 
           <div class="p-6 md:p-10 pt-0">
-            <div class="bg-slate-900/40 backdrop-blur-sm rounded-3xl p-6 md:p-8 border border-white/5 shadow-2xl">
+            <div class="bg-[#14181c]/50 backdrop-blur-sm rounded-3xl p-6 md:p-8 border border-white/5 shadow-2xl">
               <div class="grid grid-cols-1 lg:grid-cols-3 gap-10">
                 
                 <div class="lg:col-span-1 lg:border-r lg:border-white/5 lg:pr-8">

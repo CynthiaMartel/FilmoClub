@@ -31,6 +31,7 @@ const popularReviews = ref([])
 const journalPosts = ref([])
 const friendsActivity = ref([])  // film_actions de personas seguidas
 const friendsEntries = ref([])   // debates, reviews, listas de personas seguidas
+const communityFilmComments = ref([])  // últimos comentarios en films de seguidos
 
 // Paginación para Entradas de mi comunidad
 const friendsEntriesPage = ref(1)
@@ -100,11 +101,12 @@ const fetchDashboardData = async () => {
 
     if (auth.isAuthenticated) {
         promises.push(api.get('/feed').catch(() => null))
+        promises.push(api.get('/comments/community/films').catch(() => null))
     }
 
     const results = await Promise.allSettled(promises);
 
-    const [feedResult, filmsResult, heroResult, postsResult, activityResult] = results;
+    const [feedResult, filmsResult, heroResult, postsResult, activityResult, communityCommentsResult] = results;
 
     if (feedResult.status === 'fulfilled') {
         const allEntries = feedResult.value.data.data.data;
@@ -132,6 +134,10 @@ const fetchDashboardData = async () => {
         friendsEntries.value = allFeed.filter(item =>
             ['user_debate', 'user_review', 'user_list'].includes(item.type)
         );
+    }
+
+    if (communityCommentsResult && communityCommentsResult.status === 'fulfilled' && communityCommentsResult.value) {
+        communityFilmComments.value = communityCommentsResult.value.data?.data || [];
     }
 
   } catch (error) {
@@ -252,7 +258,7 @@ watch(() => auth.isAuthenticated, (isAuth) => {
       <div v-else class="flex flex-col gap-14">
 
         <!-- ── ACTIVIDAD DE MI COMUNIDAD (solo si autenticado) ──────────── -->
-        <template v-if="auth.isAuthenticated && (friendsActivity.length > 0 || friendsEntries.length > 0)">
+        <template v-if="auth.isAuthenticated && (friendsActivity.length > 0 || friendsEntries.length > 0 || communityFilmComments.length > 0)">
 
           <!-- Films: rated, watched, liked -->
           <section v-if="friendsActivity.length > 0">
@@ -300,123 +306,139 @@ watch(() => auth.isAuthenticated, (isAuth) => {
             </ul>
           </section>
 
-          <!-- Entradas: debates, reviews, listas -->
-          <section v-if="friendsEntries.length > 0">
-            <div class="flex items-center justify-between mb-4 border-b border-slate-800 pb-2">
-              <h2 class="text-xs font-black uppercase tracking-[0.2em] text-slate-200">Debates, reviews, listas de mi comunidad</h2>
+          <!-- ¿Qué dice mi comunidad? — Entradas + Comentarios en films -->
+          <section v-if="friendsEntries.length > 0 || communityFilmComments.length > 0">
+
+            <div class="flex items-center justify-between mb-5 border-b border-slate-800 pb-2">
+              <h2 class="text-xs font-black uppercase tracking-[0.2em] text-slate-200">¿Qué dice mi comunidad?</h2>
               <button @click="router.push({ name: 'community' })" class="text-[9px] font-bold text-slate-500 uppercase tracking-widest hover:text-brand transition-colors">Ver todo</button>
             </div>
 
-            <div class="grid grid-cols-2 sm:grid-cols-3 gap-5">
-              <div
-                v-for="(entry, index) in paginatedFriendsEntries"
-                :key="'entry-' + entry.entry_id + '-' + index"
-                class="group cursor-pointer"
-                @click="goToEntry(entry.type, entry.entry_id)"
-              >
-                <!-- ── THUMBNAIL (varía según tipo) ────────────────── -->
-                <div class="mb-2.5">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
 
-                  <!-- LISTA: fila solapada de posters, estilo Letterboxd -->
-                  <template v-if="entry.type === 'user_list'">
-                    <div v-if="entry.films?.length" class="mini-poster-stack">
-                      <ul class="mini-poster-list">
-                        <li
-                          v-for="(film, fi) in entry.films.slice(0, 5)"
-                          :key="film.idFilm"
-                          class="mini-poster-item"
-                          :style="{ zIndex: fi * 10 }"
-                          @click.stop="router.push(`/films/${film.idFilm}`)"
-                        >
-                          <img :src="film.frame || '/default-poster.webp'" :alt="film.title" class="mini-poster-img" loading="lazy" />
-                        </li>
-                      </ul>
-                    </div>
-                    <div v-else class="w-[70px] h-[105px] bg-slate-800/60 rounded border border-slate-700/50 flex items-center justify-center">
-                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 text-slate-600"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 12h16.5m-16.5 3.75h16.5M3.75 19.5h16.5M5.625 4.5h12.75a1.875 1.875 0 0 1 0 3.75H5.625a1.875 1.875 0 0 1 0-3.75Z" /></svg>
-                    </div>
-                  </template>
+              <!-- ── IZQUIERDA: debates, reviews, listas ── -->
+              <div v-if="friendsEntries.length > 0" class="md:col-span-2">
+                <p class="text-[9px] font-black uppercase tracking-widest text-slate-600 mb-4">Debates · Reviews · Listas</p>
+                <div class="grid grid-cols-2 md:grid-cols-2 xl:grid-cols-3 gap-5">
+                  <div
+                    v-for="(entry, index) in paginatedFriendsEntries"
+                    :key="'entry-' + entry.entry_id + '-' + index"
+                    class="group cursor-pointer"
+                    @click="goToEntry(entry.type, entry.entry_id)"
+                  >
+                    <div class="mb-2.5">
+                      <template v-if="entry.type === 'user_list'">
+                        <div v-if="entry.films?.length" class="mini-poster-stack">
+                          <ul class="mini-poster-list">
+                            <li
+                              v-for="(film, fi) in entry.films.slice(0, 5)"
+                              :key="film.idFilm"
+                              class="mini-poster-item"
+                              :style="{ zIndex: fi * 10 }"
+                              @click.stop="router.push(`/films/${film.idFilm}`)"
+                            >
+                              <img :src="film.frame || '/default-poster.webp'" :alt="film.title" class="mini-poster-img" loading="lazy" />
+                            </li>
+                          </ul>
+                        </div>
+                        <div v-else class="w-[70px] h-[105px] bg-slate-800/60 rounded border border-slate-700/50 flex items-center justify-center">
+                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 text-slate-600"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 12h16.5m-16.5 3.75h16.5M3.75 19.5h16.5M5.625 4.5h12.75a1.875 1.875 0 0 1 0 3.75H5.625a1.875 1.875 0 0 1 0-3.75Z" /></svg>
+                        </div>
+                      </template>
 
-                  <!-- DEBATE: poster portrait + bocadillo naranja -->
-                  <template v-else-if="entry.type === 'user_debate'">
-                    <div class="relative w-[90px] h-[135px] sm:w-[100px] sm:h-[150px] rounded overflow-hidden border border-white/10 group-hover:border-orange-500/40 transition-colors shadow-md"
-                      @click.stop="entry.films?.[0]?.idFilm && router.push(`/films/${entry.films[0].idFilm}`)">
-                      <img :src="entry.films?.[0]?.frame || '/default-poster.webp'" :alt="entry.title"
-                        class="w-full h-full object-cover opacity-80 group-hover:opacity-100 group-hover:scale-105 transition-all duration-500" loading="lazy" />
-                      <div class="absolute top-1 left-1 w-4 h-4 rounded-full bg-slate-900/90 border border-slate-700 flex items-center justify-center text-orange-400">
-                        <i class="bi bi-chat-quote-fill text-[7px]"></i>
+                      <template v-else-if="entry.type === 'user_debate'">
+                        <div class="relative w-[90px] h-[135px] sm:w-[100px] sm:h-[150px] rounded overflow-hidden border border-white/10 group-hover:border-orange-500/40 transition-colors shadow-md"
+                          @click.stop="entry.films?.[0]?.idFilm && router.push(`/films/${entry.films[0].idFilm}`)">
+                          <img :src="entry.films?.[0]?.frame || '/default-poster.webp'" :alt="entry.title"
+                            class="w-full h-full object-cover opacity-80 group-hover:opacity-100 group-hover:scale-105 transition-all duration-500" loading="lazy" />
+                          <div class="absolute top-1 left-1 w-4 h-4 rounded-full bg-slate-900/90 border border-slate-700 flex items-center justify-center text-orange-400">
+                            <i class="bi bi-chat-quote-fill text-[7px]"></i>
+                          </div>
+                        </div>
+                      </template>
+
+                      <template v-else>
+                        <div class="relative w-[90px] h-[135px] sm:w-[100px] sm:h-[150px] rounded overflow-hidden border border-white/10 group-hover:border-slate-400/50 transition-colors shadow-md"
+                          @click.stop="entry.films?.[0]?.idFilm && router.push(`/films/${entry.films[0].idFilm}`)">
+                          <img :src="entry.films?.[0]?.frame || '/default-poster.webp'" :alt="entry.title"
+                            class="w-full h-full object-cover opacity-75 sepia-[0.5] group-hover:sepia-0 group-hover:opacity-100 group-hover:scale-105 transition-all duration-500" loading="lazy" />
+                          <div class="absolute top-1 left-1 w-4 h-4 rounded-full bg-white/10 backdrop-blur-sm border border-white/20 flex items-center justify-center text-white">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-2.5 h-2.5"><path fill-rule="evenodd" d="M4.804 21.644A6.707 6.707 0 0 0 6 21.75a6.721 6.721 0 0 0 3.583-1.029c.774.182 1.584.279 2.417.279 5.322 0 9.75-3.97 9.75-9 0-5.03-4.428-9-9.75-9s-9.75 3.97-9.75 9c0 2.409 1.025 4.587 2.674 6.192.232.226.277.428.254.543a3.73 3.73 0 0 1-.814 1.686.75.75 0 0 0 .44 1.223 4.58 4.58 0 0 0 .744-.072z" clip-rule="evenodd" /></svg>
+                          </div>
+                        </div>
+                      </template>
+                    </div>
+
+                    <h3 class="text-[12px] font-black uppercase text-slate-200 line-clamp-2 mb-2 leading-tight group-hover:text-white transition-colors">{{ entry.title }}</h3>
+
+                    <div class="flex items-start gap-1.5">
+                      <div class="w-5 h-5 rounded-full bg-slate-700 border border-slate-500 flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <span class="text-[7px] font-black text-white">{{ getInitial(entry.user) }}</span>
                       </div>
-                    </div>
-                  </template>
-
-                  <!-- REVIEW: poster portrait sepia + icono globo blanco -->
-                  <template v-else>
-                    <div class="relative w-[90px] h-[135px] sm:w-[100px] sm:h-[150px] rounded overflow-hidden border border-white/10 group-hover:border-slate-400/50 transition-colors shadow-md"
-                      @click.stop="entry.films?.[0]?.idFilm && router.push(`/films/${entry.films[0].idFilm}`)">
-                      <img :src="entry.films?.[0]?.frame || '/default-poster.webp'" :alt="entry.title"
-                        class="w-full h-full object-cover opacity-75 sepia-[0.5] group-hover:sepia-0 group-hover:opacity-100 group-hover:scale-105 transition-all duration-500" loading="lazy" />
-                      <div class="absolute top-1 left-1 w-4 h-4 rounded-full bg-white/10 backdrop-blur-sm border border-white/20 flex items-center justify-center text-white">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-2.5 h-2.5">
-                          <path fill-rule="evenodd" d="M4.804 21.644A6.707 6.707 0 0 0 6 21.75a6.721 6.721 0 0 0 3.583-1.029c.774.182 1.584.279 2.417.279 5.322 0 9.75-3.97 9.75-9 0-5.03-4.428-9-9.75-9s-9.75 3.97-9.75 9c0 2.409 1.025 4.587 2.674 6.192.232.226.277.428.254.543a3.73 3.73 0 0 1-.814 1.686.75.75 0 0 0 .44 1.223 4.58 4.58 0 0 0 .744-.072z" clip-rule="evenodd" />
-                        </svg>
+                      <div class="min-w-0">
+                        <p class="text-[11px] font-bold text-slate-100 truncate">{{ entry.user }}</p>
+                        <div class="flex items-center gap-1 flex-wrap mt-0.5">
+                          <span class="text-[9px] font-black uppercase tracking-wide px-1.5 py-0.5 rounded"
+                            :class="{
+                              'text-orange-300 bg-orange-500/15': entry.type === 'user_debate',
+                              'text-slate-200 bg-slate-600/40': entry.type === 'user_review',
+                              'text-emerald-300 bg-emerald-500/15': entry.type === 'user_list'
+                            }">
+                            {{ entry.type === 'user_debate' ? 'Debate' : entry.type === 'user_review' ? 'Reseña' : 'Lista' }}
+                          </span>
+                          <span class="text-slate-600 text-[8px]">·</span>
+                          <span class="text-[8px] text-slate-400 uppercase font-bold">{{ formatShortDate(entry.updated_at) }}</span>
+                          <span class="text-slate-600 text-[8px]">·</span>
+                          <span class="flex items-center gap-0.5 text-[8px] text-slate-300 font-bold">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-2.5 h-2.5 text-brand" aria-hidden="true"><path d="m11.645 20.91-.007-.003-.022-.012a15.247 15.247 0 0 1-.383-.218 25.18 25.18 0 0 1-4.244-3.17C4.688 15.36 2.25 12.174 2.25 8.25 2.25 5.322 4.714 3 7.688 3A5.5 5.5 0 0 1 12 5.052 5.5 5.5 0 0 1 16.313 3c2.973 0 5.437 2.322 5.437 5.25 0 3.925-2.438 7.111-4.739 9.256a25.175 25.175 0 0 1-4.244 3.17 15.247 15.247 0 0 1-.383.219l-.022.012-.007.004-.003.001a.752.752 0 0 1-.704 0l-.003-.001Z" /></svg>
+                            {{ entry.likes_count || 0 }}
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                  </template>
-
-                </div>
-
-                <!-- TÍTULO -->
-                <h3 class="text-[12px] font-black uppercase text-slate-200 line-clamp-2 mb-2 leading-tight group-hover:text-white transition-colors">{{ entry.title }}</h3>
-
-                <!-- ATTRIBUTION BLOCK -->
-                <div class="flex items-start gap-1.5">
-                  <div class="w-5 h-5 rounded-full bg-slate-700 border border-slate-500 flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <span class="text-[7px] font-black text-white">{{ getInitial(entry.user) }}</span>
-                  </div>
-                  <div class="min-w-0">
-                    <p class="text-[11px] font-bold text-slate-100 truncate">{{ entry.user }}</p>
-                    <div class="flex items-center gap-1 flex-wrap mt-0.5">
-                      <span class="text-[9px] font-black uppercase tracking-wide px-1.5 py-0.5 rounded"
-                        :class="{
-                          'text-orange-300 bg-orange-500/15': entry.type === 'user_debate',
-                          'text-slate-200 bg-slate-600/40': entry.type === 'user_review',
-                          'text-emerald-300 bg-emerald-500/15': entry.type === 'user_list'
-                        }">
-                        {{ entry.type === 'user_debate' ? 'Debate' : entry.type === 'user_review' ? 'Reseña' : 'Lista' }}
-                      </span>
-                      <span class="text-slate-600 text-[8px]">·</span>
-                      <span class="text-[8px] text-slate-400 uppercase font-bold">{{ formatShortDate(entry.updated_at) }}</span>
-                      <span class="text-slate-600 text-[8px]">·</span>
-                      <span class="flex items-center gap-0.5 text-[8px] text-slate-300 font-bold">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-2.5 h-2.5 text-brand" aria-hidden="true">
-                          <path d="m11.645 20.91-.007-.003-.022-.012a15.247 15.247 0 0 1-.383-.218 25.18 25.18 0 0 1-4.244-3.17C4.688 15.36 2.25 12.174 2.25 8.25 2.25 5.322 4.714 3 7.688 3A5.5 5.5 0 0 1 12 5.052 5.5 5.5 0 0 1 16.313 3c2.973 0 5.437 2.322 5.437 5.25 0 3.925-2.438 7.111-4.739 9.256a25.175 25.175 0 0 1-4.244 3.17 15.247 15.247 0 0 1-.383.219l-.022.012-.007.004-.003.001a.752.752 0 0 1-.704 0l-.003-.001Z" />
-                        </svg>
-                        {{ entry.likes_count || 0 }}
-                      </span>
                     </div>
                   </div>
                 </div>
 
+                <!-- Paginación -->
+                <div v-if="friendsEntriesTotalPages > 1" class="flex items-center justify-center gap-3 mt-6 pt-4 border-t border-slate-800/50">
+                  <button @click="friendsEntriesPage--" :disabled="friendsEntriesPage === 1" class="w-7 h-7 flex items-center justify-center rounded border border-slate-700 text-slate-400 hover:border-brand hover:text-brand disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-3 h-3"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" /></svg>
+                  </button>
+                  <span class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{{ friendsEntriesPage }} / {{ friendsEntriesTotalPages }}</span>
+                  <button @click="friendsEntriesPage++" :disabled="friendsEntriesPage === friendsEntriesTotalPages" class="w-7 h-7 flex items-center justify-center rounded border border-slate-700 text-slate-400 hover:border-brand hover:text-brand disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-3 h-3"><path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" /></svg>
+                  </button>
+                </div>
               </div>
-            </div>
 
-            <!-- Paginación -->
-            <div v-if="friendsEntriesTotalPages > 1" class="flex items-center justify-center gap-3 mt-6 pt-4 border-t border-slate-800/50">
-              <button
-                @click="friendsEntriesPage--"
-                :disabled="friendsEntriesPage === 1"
-                class="w-7 h-7 flex items-center justify-center rounded border border-slate-700 text-slate-400 hover:border-brand hover:text-brand disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-3 h-3"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" /></svg>
-              </button>
-              <span class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{{ friendsEntriesPage }} / {{ friendsEntriesTotalPages }}</span>
-              <button
-                @click="friendsEntriesPage++"
-                :disabled="friendsEntriesPage === friendsEntriesTotalPages"
-                class="w-7 h-7 flex items-center justify-center rounded border border-slate-700 text-slate-400 hover:border-brand hover:text-brand disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-3 h-3"><path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" /></svg>
-              </button>
+              <!-- ── DERECHA: últimos comentarios en films ── -->
+              <div v-if="communityFilmComments.length > 0" class="md:col-span-1">
+                <p class="text-[9px] font-black uppercase tracking-widest text-slate-600 mb-4">Últimos comentarios en films</p>
+                <ul class="space-y-2">
+                  <li
+                    v-for="item in communityFilmComments.slice(0, 6)"
+                    :key="item.id"
+                    class="flex gap-3 p-3 bg-slate-800/30 border border-slate-800/60 rounded-xl cursor-pointer hover:border-slate-700 transition-colors group"
+                    @click="router.push(`/films/${item.film.idFilm}`)"
+                  >
+                    <div class="w-7 h-[42px] sm:w-8 sm:h-[48px] rounded overflow-hidden flex-shrink-0 border border-white/10 group-hover:border-white/25 transition-colors">
+                      <img :src="item.film.frame || '/default-poster.webp'" :alt="item.film.title" class="w-full h-full object-cover" loading="lazy" />
+                    </div>
+                    <div class="flex-1 min-w-0">
+                      <p class="text-[10px] font-black text-slate-300 truncate group-hover:text-white transition-colors">{{ item.film.title }}</p>
+                      <p class="text-[10px] text-slate-400 italic line-clamp-2 leading-snug mt-0.5">"{{ item.comment }}"</p>
+                      <div class="flex items-center justify-between mt-1.5">
+                        <span class="text-[9px] font-bold text-slate-600">@{{ item.user.name }}</span>
+                        <span class="flex items-center gap-1 text-[9px] text-slate-600">
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-2.5 h-2.5 text-brand/60"><path d="m11.645 20.91-.007-.003-.022-.012a15.247 15.247 0 0 1-.383-.218 25.18 25.18 0 0 1-4.244-3.17C4.688 15.36 2.25 12.174 2.25 8.25 2.25 5.322 4.714 3 7.688 3A5.5 5.5 0 0 1 12 5.052 5.5 5.5 0 0 1 16.313 3c2.973 0 5.437 2.322 5.437 5.25 0 3.925-2.438 7.111-4.739 9.256a25.175 25.175 0 0 1-4.244 3.17 15.247 15.247 0 0 1-.383.219l-.022.012-.007.004-.003.001a.752.752 0 0 1-.704 0l-.003-.001Z" /></svg>
+                          {{ item.likes_count || 0 }}
+                        </span>
+                      </div>
+                    </div>
+                  </li>
+                </ul>
+              </div>
+
             </div>
           </section>
 
@@ -745,7 +767,7 @@ watch(() => auth.isAuthenticated, (isAuth) => {
 /* Scrollbars personalizadas */
 .brand-scroll::-webkit-scrollbar { width: 4px; height: 4px; }
 .brand-scroll::-webkit-scrollbar-track { background: #1e293b; border-radius: 10px; }
-.brand-scroll::-webkit-scrollbar-thumb { background: var(--brand-color, #dd6a23); border-radius: 10px; }
+.brand-scroll::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
 
 /* Truncado de texto */
 .line-clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }

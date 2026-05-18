@@ -3,6 +3,9 @@ import { ref, watch, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import api from '@/services/api'
 import { avatarUrl } from '@/composables/useAvatar'
+import ProposeFilmModal from '@/components/ProposeFilmModal.vue'
+
+const proposeOpen = ref(false)
 
 const route  = useRoute()
 const router = useRouter()
@@ -151,8 +154,14 @@ onMounted(fetchResults)
             <div v-for="i in 6" :key="i" class="h-40 bg-slate-800 rounded-xl animate-pulse"></div>
           </div>
 
-          <div v-else-if="allResults.length === 0" class="py-16 border border-dashed border-slate-800 rounded-xl text-center opacity-50">
-            <p class="text-slate-500 text-[11px] uppercase tracking-[0.2em] font-bold">Sin resultados para "{{ query }}"</p>
+          <div v-else-if="allResults.length === 0" class="py-16 border border-dashed border-slate-800 rounded-xl text-center space-y-3">
+            <p class="text-slate-500 text-[11px] uppercase tracking-[0.2em] font-bold opacity-50">Sin resultados para "{{ query }}"</p>
+            <button
+              @click="proposeOpen = true"
+              class="text-xs text-brand hover:text-brand/80 transition-colors underline underline-offset-2"
+            >
+              ¿No encuentras la película? Proponla aquí
+            </button>
           </div>
 
           <div v-else class="flex flex-col gap-3">
@@ -209,6 +218,17 @@ onMounted(fetchResults)
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="flex-shrink-0 w-4 h-4 text-slate-700 group-hover:text-slate-400 transition-colors">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
               </svg>
+            </div>
+
+            <!-- Propose trigger al final de resultados -->
+            <div v-if="query.trim().length >= 2 && !loading" class="mt-4 text-center">
+              <button
+                @click="proposeOpen = true"
+                class="text-xs text-slate-500 hover:text-brand transition-colors"
+              >
+                ¿No encuentras la película que buscas?
+                <span class="underline underline-offset-2">Proponla aquí</span>
+              </button>
             </div>
           </div>
         </div>
@@ -344,6 +364,8 @@ onMounted(fetchResults)
 
     </div>
   </div>
+
+  <ProposeFilmModal v-model="proposeOpen" />
 </template>
 
 <style scoped>

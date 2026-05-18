@@ -124,6 +124,10 @@ const originCountries = computed(() => {
     })
 })
 
+const displayTitle = computed(() =>
+  film.value?.alternative_titles?.es || film.value?.title
+)
+
 // Sinopsis: traducción
 const showTranslated = ref(false)
 const isTranslating  = ref(false)
@@ -282,13 +286,20 @@ onMounted(fetchFilm)
             
             <section class="film-header mb-8">
               <h1 class="text-4xl sm:text-5xl font-black text-white tracking-tight leading-tight mb-4 drop-shadow-lg font-serif">
-                {{ film.title }}
+                {{ displayTitle }}
               </h1>
-              
+
+              <p
+                v-if="film.original_title && film.original_title !== displayTitle"
+                class="text-slate-400 text-lg italic mb-4"
+              >
+                {{ film.original_title }}
+              </p>
+
               <div class="flex flex-wrap items-center gap-4 text-sm font-bold">
                 <span v-if="filmYear" class="text-slate-300">{{ filmYear }}</span>
                 <div v-if="directors.length" class="flex gap-2 text-[#899]">
-                  <span class="font-normal">Directed by</span>
+                  <span class="font-normal">Dirigida por</span>
                   <template v-for="(dir, index) in directors" :key="dir.idPerson">
                     <span @click="openPerson(dir.idPerson)" class="text-slate-100 hover:text-white border-b border-slate-700 hover:border-slate-100 cursor-pointer">
                       {{ dir.name }}
