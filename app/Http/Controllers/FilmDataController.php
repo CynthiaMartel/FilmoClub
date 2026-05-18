@@ -13,432 +13,190 @@ use App\Jobs\ImportFilmsJob;
 class FilmDataController extends Controller
 {
 
-// API TMDB + WIKIDATA --> LÓGICA PRINCIPAL que utiliza conexión a API TMDB para traer los datos a la tabla film y uso de API WIKIDATA  
-// con callbacks a funciones que traen de esta API campos que no se podrían encontrar en TMDB 
-// (A veces no se encuentran tampoco en WIKIDATA por películas poco conocidas o muy nuevas) 
-
 public function importFromTMDB($yearStart, $yearEnd, $startPage = 1, $endPage = 1)
-
 {
-    $apiKey = config('services.tmdb.key'); // Guardado en config/services.php
+    $apiKey = config('services.tmdb.key');
 
     if (!$apiKey) {
         Log::error("Falta clave API de TMDb");
         return response()->json(['error' => 'Falta la clave API de TMDb'], 500);
     }
 
-    $limit = 0; // PARA PRUEBAS: Manejar poniendo límite de 2-3 films y después --> ¡Cambiar a null o eliminar para traer todas las pelis!
     $insertadas = 0;
-    $fallidas = 0;
+    $fallidas   = 0;
 
-    Log::info("Inicio de importación de films ($yearStart - $yearEnd)");
+    Log::info("Inicio de importación de films ($yearStart-$yearEnd), páginas $startPage-$endPage");
 
-    // Cargar caché local de Wikidata IDs (título => QID) en storage/app/wikidata_cache.json
-    $wikidataCache = $this->loadWikidataCache(); // Carga/guarda la caché local de Wikidata para evitar repetir consultas SPARQL en importaciones masivas.
+    for ($page = $startPage; $page <= $endPage; $page++) {
+        $discoverUrl = "https://api.themoviedb.org/3/discover/movie"
+            . "?api_key=$apiKey"
+            . "&primary_release_date.gte={$yearStart}-01-01"
+            . "&primary_release_date.lte={$yearEnd}-12-31"
+            . "&page=$page"
+            . "&sort_by=popularity.desc";
 
-
-    for ($page = $startPage; $page <= $endPage; $page++) { // Para peticiones a la página discovery de TMDB descubrir películas filtradas y ordenadas
-                                                // (fechas, género, idioma, país, etc.), sin necesidad de buscar por título específico a diferencia de la pág. search
-        $url = "https://api.themoviedb.org/3/discover/movie?api_key=$apiKey&primary_release_date.gte={$yearStart}-01-01&primary_release_date.lte={$yearEnd}-12-31&page=$page&sort_by=popularity.desc";
-        $response = Http::timeout(10)->get($url); // timeout() para tener un tope de espera en la petición y sino, se pasa al siguiente
+        $response = Http::timeout(10)->get($discoverUrl);
 
         if (!$response->successful()) {
-            Log::warning("Fallo en la petición TMDb Discover: Página $page");
+            Log::warning("Fallo en TMDB Discover: página $page");
             continue;
         }
 
-        $data = $response->json();
-        if (empty($data['results'])) continue;
+        $results = $response->json('results', []);
+        if (empty($results)) continue;
 
-        // Nota: si limit es mayor que 0 (subir a más de 0 para pruebas), entonces se corta el array y trae esa cantidad de films, si limit = 0, trae todos los films
-        foreach (($limit > 0 ? array_slice($data['results'], 0, $limit) : $data['results']) as $movie) { 
-
+        foreach ($results as $movie) {
             try {
-
                 $detailsResponse = Http::timeout(10)->get(
-                    "https://api.themoviedb.org/3/movie/{$movie['id']}?api_key=$apiKey&append_to_response=credits,external_ids"
+                    "https://api.themoviedb.org/3/movie/{$movie['id']}"
+                    . "?api_key=$apiKey"
+                    . "&append_to_response=credits,external_ids,alternative_titles"
                 );
 
-                if ($detailsResponse->status() === 429) { // Incluir error 429 y sleep
-                Log::warning("TMDb devolvió 429 (demasiadas peticiones) en detalles de película {$movie['id']}. Esperando 30s...");
-                sleep(30);
-                $detailsResponse = Http::timeout(10)->get(
-                    "https://api.themoviedb.org/3/movie/{$movie['id']}?api_key=$apiKey&append_to_response=credits,external_ids"
-                );
+                if ($detailsResponse->status() === 429) {
+                    Log::warning("TMDB 429 en película {$movie['id']}. Esperando 30s...");
+                    sleep(30);
+                    $detailsResponse = Http::timeout(10)->get(
+                        "https://api.themoviedb.org/3/movie/{$movie['id']}"
+                        . "?api_key=$apiKey"
+                        . "&append_to_response=credits,external_ids,alternative_titles"
+                    );
                 }
 
                 if (!$detailsResponse->successful()) {
-                    Log::warning("Fallo al obtener detalles de TMDb para ID {$movie['id']}");
+                    Log::warning("Fallo detalles TMDB para ID {$movie['id']}");
                     $fallidas++;
                     continue;
                 }
 
                 $details = $detailsResponse->json();
-                $castTMDb = $details['credits']['cast'] ?? [];
-                
-                // --- INICIO CÓDIGO NUEVO DIRECTORES ---
-                $directorsData = collect($details['credits']['crew'] ?? [])->where('job', 'Director');
-                $directorIds = []; // Array para guardar todos los IDs de directores encontrados
 
+                // Directores
+                $directorsData = collect($details['credits']['crew'] ?? [])->where('job', 'Director');
+                $directorIds   = [];
                 foreach ($directorsData as $dData) {
                     if (!empty($dData['id']) && !empty($dData['name'])) {
                         $directorRecord = CastCrew::firstOrCreate(
                             ['tmdb_id' => $dData['id']],
-                            [
-                                'name' => $dData['name'],
-                                'bio' => null,
-                                'profile_path' => $dData['profile_path'] ?? null,
-                            ]
+                            ['name' => $dData['name'], 'bio' => null, 'profile_path' => $dData['profile_path'] ?? null]
                         );
                         $directorIds[] = $directorRecord->idPerson;
                     }
                 }
+                $mainDirectorId = $directorIds[0] ?? null;
 
-                // Para mantener compatibilidad con tu columna 'director_id' en la tabla films:
-                $mainDirectorId = !empty($directorIds) ? $directorIds[0] : null;
-
-                if (empty($directorIds)) {
-                    Log::info("Película '{$details['title']}' sin directores válidos.");
+                // Títulos alternativos desde TMDB (sin coste extra — viene en append_to_response)
+                $rawAltTitles = $details['alternative_titles']['titles'] ?? [];
+                $alternativeTitles = [];
+                foreach ($rawAltTitles as $alt) {
+                    $iso = strtolower($alt['iso_3166_1'] ?? '');
+                    if (in_array($iso, ['es', 'en', 'it', 'fr', 'de']) && !empty($alt['title'])) {
+                        $alternativeTitles[$iso] = $alt['title'];
+                    }
                 }
-                // --- FIN CÓDIGO NUEVO DIRECTORES ---
 
-                $genres = implode(', ', array_column($details['genres'] ?? [], 'name'));
+                $genres    = implode(', ', array_column($details['genres'] ?? [], 'name'));
                 $countries = implode(', ', array_column($details['production_countries'] ?? [], 'name'));
-
-                // Buscar el wikidata_id proporcionado por TMDb; si no existe, se intentará obtener desde la BD o la cache wikidata_cache
                 $wikidataId = $details['external_ids']['wikidata_id'] ?? null;
-
-                // Si TMDB no incluye wikidata_id, comprobar si ya lo tenemos en la BD
-                if (!$wikidataId) {
-                    $year = date('Y', strtotime($details['release_date']));
-                    $filmWithSameTitle = Film::where('title', $details['title'])
-                        ->whereYear('release_date', $year)
-                        ->first();
-                    if ($filmWithSameTitle && !empty($filmWithSameTitle->wikidata_id)) {
-                        $wikidataId = $filmWithSameTitle->wikidata_id;
-                        Log::info("Wikidata ID reutilizado desde BD para '{$details['title']}': {$wikidataId}");
-                    }
-                }
-
-                // Si sigue sin haber wikidata_id, comprobar la caché local (resultados de importaciones anteriores)
-                // NO se hace búsqueda SPARQL por título — es demasiado lenta para importación masiva
-                // y puede provocar timeouts. Si TMDB no lo provee y no está en BD/caché, se importa sin datos Wikidata.
-                if (!$wikidataId) {
-                    $originalTitle = $details['original_title'] ?? $details['title'] ?? null;
-                    if ($originalTitle && isset($wikidataCache[$originalTitle])) {
-                        $wikidataId = $wikidataCache[$originalTitle];
-                        Log::info("Wikidata ID obtenido de caché local para '{$originalTitle}': {$wikidataId}");
-                    }
-                }
-
-                // Utilizar getWikiData(), para los datos que no nos ofrece TMDB (festivals, awards, nominations): función desarrollada más abajo
-                $wikidata = [
-                    'awards' => [], 
-                    'nominations' => [], 
-                    'festivals' => [], 
-                    'alternative_titles' => [] // <--- AHORA SÍ ESTÁ AQUÍ
-                ];
-                $titleForLog = $details['original_title'] ?? $details['title'] ?? 'Sin título';
-
-                if ($wikidataId) {
-                    try {
-                        Log::info("Encontrado Wikidata ID para {$titleForLog}: {$wikidataId}");
-                        $wikidata = $this->getWikidataData($wikidataId);
-                    } catch (\Throwable $e) {
-                        Log::warning("Fallo al obtener Wikidata para {$titleForLog}: " . $e->getMessage());
-                    }
-                } else {
-                    Log::info("No se encontró ID de Wikidata para {$titleForLog}");
-                }
-
-                $awards = $wikidata['awards'] ?? [];
-                $nominations = $wikidata['nominations'] ?? [];
-                $festivals = $wikidata['festivals'] ?? [];
-
-                Log::info("Insertando película en BD: {$details['title']}");
 
                 $existingFilm = Film::where('tmdb_id', $movie['id'])->first();
 
                 $film = Film::updateOrCreate(
-                ['tmdb_id' => $movie['id']],
-                [
-                    'wikidata_id'        => $wikidataId, 
-                    'title'              => $details['title'] ?? 'Sin título',
-                    'original_title'     => $details['original_title'] ?? null,
-                    'genre'              => $genres,
-                    'origin_country'     => $countries,
-                    'original_language'  => $details['original_language'] ?? '',
-                    'overview'           => $details['overview'] ?? '',
-                    'duration'           => $details['runtime'] ?? 0,
-                    'release_date'       => $details['release_date'] ?? now(),
-                    'frame'              => !empty($details['poster_path']) ? "https://image.tmdb.org/t/p/w500" . $details['poster_path'] : '',
-                    'backdrop' => !empty($details['backdrop_path']) ? "https://image.tmdb.org/t/p/original" . $details['backdrop_path'] : ($existingFilm?->backdrop ?? ''),
+                    ['tmdb_id' => $movie['id']],
+                    [
+                        'wikidata_id'        => $wikidataId,
+                        'title'              => $details['title'] ?? 'Sin título',
+                        'original_title'     => $details['original_title'] ?? null,
+                        'genre'              => $genres,
+                        'origin_country'     => $countries,
+                        'original_language'  => $details['original_language'] ?? '',
+                        'overview'           => $details['overview'] ?? '',
+                        'duration'           => $details['runtime'] ?? 0,
+                        'release_date'       => $details['release_date'] ?? now(),
+                        'frame'              => !empty($details['poster_path'])
+                            ? 'https://image.tmdb.org/t/p/w500' . $details['poster_path'] : '',
+                        'backdrop'           => !empty($details['backdrop_path'])
+                            ? 'https://image.tmdb.org/t/p/original' . $details['backdrop_path']
+                            : ($existingFilm?->backdrop ?? ''),
+                        'alternative_titles' => $alternativeTitles,
+                        'director_id'        => $mainDirectorId,
+                        'vote_average'       => $details['vote_average'] ?? 0,
+                        'globalRate'         => 0,
+                    ]
+                );
 
-                    'awards'             => array_slice($wikidata['awards'], 0, 10),
-                    'nominations'        => array_slice($wikidata['nominations'], 0, 10),
-                    'festivals'          => array_slice($wikidata['festivals'], 0, 10),
-                    'alternative_titles' => $wikidata['alternative_titles'], 
-
-                    'total_awards'       => count($wikidata['awards']),
-                    'total_nominations'  => count($wikidata['nominations']),
-                    'total_festivals'    => count($wikidata['festivals']),
-                    'director_id' => $mainDirectorId,
-
-                    'vote_average'       => $details['vote_average'] ?? 0,
-                    'globalRate'         => 0,
-                ]
-            );
-
-                // Realizamos una LIMPIEZA DE SEGURIDAD para rellenar cast and crew
-                // Borramos cualquier relación previa de esta película en el pivot
-                // Esto evita duplicados y limpia datos viejos al volver a llamar a la api para un re-llenado de datos faltantes al llamar al job de nuevo en films con otros campos completos
                 DB::table('film_cast_pivot')->where('idFilm', $film->idFilm)->delete();
 
-                // --- INICIO INSERCIÓN MÚLTIPLES DIRECTORES ---
                 foreach ($directorIds as $idPers) {
                     DB::table('film_cast_pivot')->insert([
-                        'idFilm' => $film->idFilm,
+                        'idFilm'   => $film->idFilm,
                         'idPerson' => $idPers,
-                        'role' => 'Director'
+                        'role'     => 'Director',
                     ]);
                 }
-                if (!empty($directorIds)) {
-                    Log::info("Directores asignados (" . count($directorIds) . ") a película $film->idFilm");
-                }
-                // --- FIN INSERCIÓN MÚLTIPLES DIRECTORES ---
 
-               //Insertamos actores y actrices: ¡¡HECHA MEJORA PARA AUMENTAR LA INSERCIÓN EN BD Y NO SATURAR!!
-                foreach ($castTMDb as $order => $actor) {
-                    // Reiniciamos la variable en cada vuelta del bucle
-                    $castCrew = null; 
+                // Cast — detalles completos para los 6 primeros, básico para el resto hasta 12
+                foreach ($details['credits']['cast'] ?? [] as $order => $actor) {
+                    if ($order >= 12) break;
+                    if (empty($actor['id']) || empty($actor['name'])) continue;
 
-                    if (!empty($actor['id']) && !empty($actor['name'])) {
-                        
-                        // Intentamos buscar si ya existe en BD para no repetir llamadas a la API
-                        $castCrew = CastCrew::where('tmdb_id', $actor['id'])->first();
+                    $castCrew = CastCrew::where('tmdb_id', $actor['id'])->first();
 
-                        // Si NO existe en nuestra base de datos, pedimos Bio y detalles a TMDB
-                        // Buscamos detalles profundos solo para los 6 primeros (índice 0 al 5) para no saturar peticiones
-                        if (!$castCrew && $order <= 5) { 
-                            try {
-                                $personUrl = "https://api.themoviedb.org/3/person/{$actor['id']}?api_key={$apiKey}";
-                                $pResponse = Http::timeout(5)->get($personUrl);
-                                
-                                if ($pResponse->successful()) {
-                                    $pDetails = $pResponse->json();
-                                    $castCrew = CastCrew::create([
-                                        'tmdb_id'        => $actor['id'],
-                                        'name'           => $actor['name'],
-                                        'bio'            => $pDetails['biography'] ?? null,
-                                        'profile_path'   => $actor['profile_path'] ?? null,
-                                        'birthday'       => $pDetails['birthday'] ?? null,
-                                        'place_of_birth' => $pDetails['place_of_birth'] ?? null,
-                                    ]);
-                                }
-                            } catch (\Exception $e) {
-                                Log::error("Error con actor {$actor['name']}: " . $e->getMessage());
-                            }
-                        } 
-                        
-                        // Si sigue siendo null (porque es un actor secundario > 6 o la API falló), se crea el registro básico pero sin biografía/fechas
-                        if (!$castCrew) {
-                            $castCrew = CastCrew::firstOrCreate(
-                                ['tmdb_id' => $actor['id']],
-                                [
-                                    'name' => $actor['name'],
-                                    'profile_path' => $actor['profile_path'] ?? null,
-                                ]
+                    if (!$castCrew && $order < 6) {
+                        try {
+                            $pResponse = Http::timeout(5)->get(
+                                "https://api.themoviedb.org/3/person/{$actor['id']}?api_key={$apiKey}"
                             );
+                            if ($pResponse->successful()) {
+                                $pDetails = $pResponse->json();
+                                $castCrew = CastCrew::create([
+                                    'tmdb_id'        => $actor['id'],
+                                    'name'           => $actor['name'],
+                                    'bio'            => $pDetails['biography'] ?? null,
+                                    'profile_path'   => $actor['profile_path'] ?? null,
+                                    'birthday'       => $pDetails['birthday'] ?? null,
+                                    'place_of_birth' => $pDetails['place_of_birth'] ?? null,
+                                ]);
+                            }
+                        } catch (\Exception $e) {
+                            Log::error("Error actor {$actor['name']}: " . $e->getMessage());
                         }
-
-                        // Insertamos la relación en la tabla pivot para los 12 actores
-                        DB::table('film_cast_pivot')->insert([
-                            'idFilm'         => $film->idFilm,
-                            'idPerson'       => $castCrew->idPerson,
-                            'role'           => 'Actor',
-                            'character_name' => $actor['character'] ?? null,
-                            'credit_order'   => $order
-                        ]);
                     }
-                    
-                    // Si ya procesamos el actor número 12 (índice 11), paramos
-                    if ($order >= 11) break; 
-                }
 
+                    if (!$castCrew) {
+                        $castCrew = CastCrew::firstOrCreate(
+                            ['tmdb_id' => $actor['id']],
+                            ['name' => $actor['name'], 'profile_path' => $actor['profile_path'] ?? null]
+                        );
+                    }
+
+                    DB::table('film_cast_pivot')->insert([
+                        'idFilm'         => $film->idFilm,
+                        'idPerson'       => $castCrew->idPerson,
+                        'role'           => 'Actor',
+                        'character_name' => $actor['character'] ?? null,
+                        'credit_order'   => $order,
+                    ]);
+                }
 
                 $insertadas++;
-                Log::info("Película guardada en BD: {$film->title}");
+                Log::info("Película guardada: {$film->title}");
 
-                usleep(200000); // 200ms entre películas — suficiente para no saturar TMDB
+                usleep(200000); // 200ms para no saturar TMDB
+
             } catch (\Throwable $e) {
                 $fallidas++;
                 Log::error("Error procesando {$movie['title']}: " . $e->getMessage());
             }
-  
         }
+    }
 
-        
-        // Lógica de nivel de página---
-        if ($page % 5 === 0) {
-            Log::info("Pausa de seguridad y guardado de caché (Página $page)...");
-            
-            // Guardamos en el archivo físico una vez cada 5 páginas
-            $this->saveWikidataCache($wikidataCache); 
-            
-            sleep(3); 
-        }
-    } 
+    Log::info("Importación finalizada. Insertadas: $insertadas, fallidas: $fallidas");
 
-    // Guardamos una última vez por seguridad
-    $this->saveWikidataCache($wikidataCache); 
-    
-    Log::info("Importación finalizada. Insertadas: $insertadas");
-
-    return response()->json(['message' => 'OK', 'insertadas' => $insertadas]);
+    return response()->json(['message' => 'OK', 'insertadas' => $insertadas, 'fallidas' => $fallidas]);
 }
 
 
-
-//___ Funciones auxiliares ____
-
-// API WIKIDATA: Obtener datos faltantes que no proporciona TMDB
-    private function getWikidataData($wikidataId)
-{
-    if (!$wikidataId) return ['awards' => [], 'nominations' => [], 'festivals' => [], 'alternative_titles' => []];
-
-    // Consulta SPARQL corregida
-    $query = urlencode("
-    SELECT DISTINCT ?awardLabel ?awardYear ?nomLabel ?nomYear ?festivalLabel ?titleES ?titleEN ?titleIT WHERE {
-      BIND(wd:$wikidataId AS ?movie)
-      
-      # Premios y su año (Prioridad: es > en)
-      OPTIONAL { 
-        ?movie p:P166 ?awardStmt. 
-        ?awardStmt ps:P166 ?award.
-        OPTIONAL { ?awardStmt pq:P585 ?timeA. BIND(YEAR(?timeA) AS ?awardYear) }
-      }
-      
-      # Nominaciones y su año (Prioridad: es > en)
-      OPTIONAL { 
-        ?movie p:P1411 ?nomStmt. 
-        ?nomStmt ps:P1411 ?nom.
-        OPTIONAL { ?nomStmt pq:P585 ?timeN. BIND(YEAR(?timeN) AS ?nomYear) }
-      }
-
-      # Festivales
-      OPTIONAL { ?movie wdt:P1344 ?festival. }
-
-      # Títulos específicos para tu array de titles
-      OPTIONAL { ?movie rdfs:label ?titleES FILTER(LANG(?titleES) = 'es') }
-      OPTIONAL { ?movie rdfs:label ?titleEN FILTER(LANG(?titleEN) = 'en') }
-      OPTIONAL { ?movie rdfs:label ?titleIT FILTER(LANG(?titleIT) = 'it') }
-
-      # LA CLAVE: El servicio de etiquetas con fallback (primero es, luego en)
-      SERVICE wikibase:label { bd:serviceParam wikibase:language 'es,en'. }
-    }");
-
-    $url = "https://query.wikidata.org/sparql?query=$query&format=json";
-
-    try {
-        // Añadimos User-Agent para evitar bloqueos 403 de Wikidata
-        $response = Http::withHeaders([
-            'Accept' => 'application/json',
-            'User-Agent' => 'CinemaClubApp/1.0 (contact: tu-email@ejemplo.com)'
-        ])->timeout(8)->get($url);
-
-        if (!$response->successful()) return ['awards' => [], 'nominations' => [], 'festivals' => [], 'alternative_titles' => []];
-
-        $data = $response->json();
-        $awards = [];
-        $nominations = [];
-        $festivals = [];
-        $titles = [];
-
-        foreach ($data['results']['bindings'] ?? [] as $bind) {
-            // Mapeo de Premios: "Nombre (Año)" - Ahora traerá el nombre en inglés si no hay español
-            if (isset($bind['awardLabel'])) {
-                $year = isset($bind['awardYear']) ? " (" . $bind['awardYear']['value'] . ")" : "";
-                $awards[] = $bind['awardLabel']['value'] . $year;
-            }
-
-            // Mapeo de Nominaciones
-            if (isset($bind['nomLabel'])) {
-                $year = isset($bind['nomYear']) ? " (" . $bind['nomYear']['value'] . ")" : "";
-                $nominations[] = $bind['nomLabel']['value'] . $year;
-            }
-
-            // Mapeo de Festivales
-            if (isset($bind['festivalLabel'])) {
-                $festivals[] = $bind['festivalLabel']['value'];
-            }
-
-            // Títulos por idioma
-            if (isset($bind['titleES'])) $titles['es'] = $bind['titleES']['value'];
-            if (isset($bind['titleEN'])) $titles['en'] = $bind['titleEN']['value'];
-            if (isset($bind['titleIT'])) $titles['it'] = $bind['titleIT']['value'];
-        }
-
-        return [
-            'awards' => array_values(array_unique($awards)),
-            'nominations' => array_values(array_unique($nominations)),
-            'festivals' => array_values(array_unique($festivals)),
-            'alternative_titles' => $titles
-        ];
-
-    } catch (\Exception $e) {
-        \Log::error("Error consultando Wikidata ID $wikidataId: " . $e->getMessage());
-        return ['awards' => [], 'nominations' => [], 'festivals' => [], 'alternative_titles' => []];
-    }
-}
-    
-    
-    // Por si TMDB no proporciona el ID de Wikidata
-    private function findWikidataIdByTitle($title)
-    {
-        if (!$title) return null;
-
-        $query = urlencode("
-        SELECT ?item WHERE {
-        ?item rdfs:label \"$title\"@en.
-        SERVICE wikibase:label { bd:serviceParam wikibase:language 'en,es'. }
-        } LIMIT 1
-        ");
-
-        $url = "https://query.wikidata.org/sparql?query=$query&format=json";
-
-        $response = Http::timeout(10)->get($url);
-
-        if ($response->status() === 429) { //Para manejar el error 429 (TMDB API puede cortar por demasiadas peticiones)
-        Log::warning("TMDb devolvió 429 (demasiadas peticiones). Esperando 30s antes de reintentar...");
-        sleep(30);
-        $response = Http::timeout(10)->get($url);
-        }
-
-        if ($response->successful() && !empty($response['results']['bindings'][0]['item']['value'])) {
-            return basename($response['results']['bindings'][0]['item']['value']); // Devuelve Qxxxx
-        }
-
-        return null;
-    }
-
-    // Cargar caché local desde archivo JSON
-    private function loadWikidataCache()
-    {
-        $path = storage_path('app/wikidata_cache.json');
-        if (!file_exists($path)) {
-            return [];
-        }
-
-        $content = file_get_contents($path);
-        return json_decode($content, true) ?? [];
-    }
-
-    // Guardar caché local en archivo JSON
-    private function saveWikidataCache(array $cache)
-    {
-        $path = storage_path('app/wikidata_cache.json');
-        file_put_contents($path, json_encode($cache, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
-    }
 
 }
 

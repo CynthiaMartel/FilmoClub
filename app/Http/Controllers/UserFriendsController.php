@@ -151,9 +151,19 @@ class UserFriendsController extends Controller
 
         $followings = UserFriend::where('follower_id', $user_id)
             ->where('status', 'accepted')
-            ->with('followed:id,name,email')
+            ->with('followed:id,name,email', 'followed.profile:id,user_id,avatar')
+            ->orderBy('created_at', 'desc')
             ->get()
-            ->pluck('followed');
+            ->map(function ($uf) {
+                $user = $uf->followed;
+                if ($user) {
+                    $user->avatar     = $user->profile?->avatar;
+                    $user->followed_at = $uf->created_at;
+                }
+                return $user;
+            })
+            ->filter()
+            ->values();
 
         return response()->json(['success' => true, 'data' => $followings]);
     }
@@ -174,9 +184,19 @@ class UserFriendsController extends Controller
 
         $followers = UserFriend::where('followed_id', $user_id)
             ->where('status', 'accepted')
-            ->with('follower:id,name,email')
+            ->with('follower:id,name,email', 'follower.profile:id,user_id,avatar')
+            ->orderBy('created_at', 'desc')
             ->get()
-            ->pluck('follower');
+            ->map(function ($uf) {
+                $user = $uf->follower;
+                if ($user) {
+                    $user->avatar      = $user->profile?->avatar;
+                    $user->followed_at = $uf->created_at;
+                }
+                return $user;
+            })
+            ->filter()
+            ->values();
 
         return response()->json(['success' => true, 'data' => $followers]);
     }

@@ -63,10 +63,7 @@ class SearchController extends Controller
         // Entradas (listas, debates, reviews)
         try {
             $entries = UserEntry::where('title', 'like', "%{$q}%")
-                ->with([
-                    'user:id,name',
-                    'films' => fn($q) => $q->select('films.idFilm', 'films.frame')->limit(1),
-                ])
+                ->with(['user:id,name', 'films'])
                 ->orderBy('created_at', 'desc')
                 ->limit(8)
                 ->get()

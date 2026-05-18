@@ -20,7 +20,7 @@ class VerifyEmailController extends Controller
             ], 422);
         }
 
-        if (Carbon::parse($user->dateHourLastAccess)->diffInHours(Carbon::now()) > 24) {
+        if ($user->created_at->diffInHours(Carbon::now()) > 24) {
             return response()->json([
                 'success' => 0,
                 'message' => 'El enlace ha caducado. Regístrate de nuevo.',
