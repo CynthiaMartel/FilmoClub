@@ -153,6 +153,19 @@ const toggleTranslation = () => {
 }
 
 
+const fetchSpanishTitleIfMissing = async () => {
+  if (film.value?.alternative_titles?.es) return
+  try {
+    const { data } = await api.get(`/films/${film.value.idFilm}/spanish-title`)
+    if (data.title_es) {
+      film.value = {
+        ...film.value,
+        alternative_titles: { ...(film.value.alternative_titles ?? {}), es: data.title_es },
+      }
+    }
+  } catch { /* silencioso: el título original se mantiene */ }
+}
+
 // Carga de datos
 const fetchFilm = async () => {
   isLoading.value = true
@@ -164,6 +177,7 @@ const fetchFilm = async () => {
     await Promise.all([fetchUserFilmActions(), fetchFilmEntries(id)])
     // Si ya está traducida en BD, mostrar en español directamente
     if (film.value?.overview_es) showTranslated.value = true
+    fetchSpanishTitleIfMissing()
   } catch (e) {
     error.value = 'No se pudo cargar la información de la película.'
   } finally {
