@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Models\UserEntry;
 use App\Models\Post;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 class SearchController extends Controller
 {
@@ -44,6 +45,7 @@ class SearchController extends Controller
                     'genre' => $f->genre,
                 ]);
         } catch (\Exception $e) {
+            Log::error('SearchController films query failed: ' . $e->getMessage());
             $films = collect();
         }
 
