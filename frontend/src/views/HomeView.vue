@@ -279,17 +279,22 @@ watch(() => auth.isAuthenticated, (isAuth) => {
               >
                 <div class="relative w-[160px] h-[240px] sm:w-[180px] sm:h-[270px] rounded overflow-hidden border border-white/10 group-hover:border-white/40 transition-colors shadow-lg">
                   <img :src="activity.film_frame || '/default-poster.webp'" :alt="activity.film_title" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" />
-                  <!-- Avatar + nombre usuario -->
-                  <div class="absolute bottom-1 left-1 bg-[#14181c]/90 rounded px-1.5 py-1 flex items-center gap-1.5 backdrop-blur-sm border border-slate-700/50">
-                    <div class="w-4 h-4 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center flex-shrink-0">
-                      <span class="text-[7px] font-black text-white">{{ getInitial(activity.user) }}</span>
-                    </div>
-                    <span class="text-[9px] font-bold text-slate-200 truncate max-w-[90px]">{{ activity.user }}</span>
-                  </div>
                 </div>
 
-                <!-- Iconos + estrellas debajo del poster -->
-                <div class="flex flex-col items-center gap-1 mt-2">
+                <!-- Avatar + nombre usuario fuera del poster, clicable al perfil -->
+                <div
+                  class="flex items-center gap-1.5 mt-2 cursor-pointer group/user"
+                  @click.stop="router.push({ name: 'user-profile', params: { username: activity.user } })"
+                >
+                  <div class="w-5 h-5 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                    <img v-if="activity.user_avatar" :src="activity.user_avatar" class="w-full h-full object-cover" loading="lazy" />
+                    <span v-else class="text-[8px] font-black text-white">{{ getInitial(activity.user) }}</span>
+                  </div>
+                  <span class="text-[10px] font-bold text-slate-300 truncate max-w-[120px] group-hover/user:text-brand transition-colors">{{ activity.user }}</span>
+                </div>
+
+                <!-- Iconos + estrellas debajo -->
+                <div class="flex flex-col items-center gap-1 mt-1">
                   <div class="flex items-center justify-center gap-1.5">
                     <StarDisplay v-if="activity.rating" :rating="activity.rating" :lg="true" />
                     <span v-if="activity.rating" class="text-[11px] font-black text-slate-200 leading-none tabular-nums">{{ activity.rating }}</span>
