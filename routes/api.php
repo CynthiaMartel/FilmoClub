@@ -114,6 +114,10 @@ Route::get('/films/{id}/watch-providers', [FilmController::class, 'watchProvider
 Route::get('/films/{film}', [FilmController::class, 'show'])
     ->name('api.films.show');
 
+Route::get('/films/{film}/spanish-title', [FilmController::class, 'fetchSpanishTitle'])
+    ->middleware('throttle:60,1')
+    ->name('api.films.spanish-title');
+
 Route::post('/films/{film}/translate-overview', [FilmController::class, 'translateOverview'])
     ->middleware('throttle:60,1')
     ->name('api.films.translate-overview');

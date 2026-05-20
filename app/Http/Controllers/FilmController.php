@@ -184,6 +184,44 @@ class FilmController extends Controller
         }
     }
 
+    public function fetchSpanishTitle(Film $film)
+    {
+        $titles = $film->alternative_titles ?? [];
+
+        if (!empty($titles['es'])) {
+            return response()->json(['title_es' => $titles['es']]);
+        }
+
+        if (!$film->tmdb_id) {
+            return response()->json(['title_es' => null]);
+        }
+
+        $apiKey = config('services.tmdb.key');
+        $response = Http::timeout(8)->get(
+            "https://api.themoviedb.org/3/movie/{$film->tmdb_id}/translations?api_key={$apiKey}"
+        );
+
+        if (!$response->successful()) {
+            return response()->json(['title_es' => null], 502);
+        }
+
+        $titleEs = null;
+        foreach ($response->json('translations', []) as $t) {
+            if (($t['iso_639_1'] ?? '') === 'es' && !empty($t['data']['title'])) {
+                $titleEs = $t['data']['title'];
+                break;
+            }
+        }
+
+        if ($titleEs) {
+            $titles['es'] = $titleEs;
+            $film->alternative_titles = $titles;
+            $film->saveQuietly();
+        }
+
+        return response()->json(['title_es' => $titleEs]);
+    }
+
     // Admin: Crear película manualmente por si se necesita añadir alguna película que no se haya encontrado con API TMDB ni Wikidata (de manera manual desde ADMIN)
     public function store(FilmRequest $request)
     {
