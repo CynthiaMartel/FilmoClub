@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\FilmDataController;
 use App\Http\Controllers\TestsDBApisController;
+use App\Jobs\ImportFilmsJob;
 
 use Illuminate\Support\Facades\Route;
 
@@ -43,10 +44,16 @@ Route::get('/wikidata/test_title_wikidata/{title}', [TestsDBApisController::clas
 // --Rutas para importar desde APIs wikidata y tmdb --> poblar y guardar en BD (si en la función se cambia la variable limit por un núnero reducido, puede servir de prueba rápida para ver si se puebla la BD correctamente)
 Route::post('/films/import/{yearStart}/{yearEnd}/{startPage?}/{endPage?}', [FilmDataController::class, 'importFromTMDB'])->name('films.import');
 
-// Ruta para manejar el Job por si usamos Postman o desde la Web
-Route::post('/films/import/{start}/{end}/{from}/{to}', function($start,$end,$from,$to){'\App\Jobs\ImportFilmsJob'::dispatch((int)$start,(int)$end,(int)$from,(int)$to);
+// Ruta manual para encolar importación desde Postman/Web
+// Despacha 1 job por página (from..to) — misma estrategia que el scheduler
+Route::post('/films/import/{start}/{end}/{from}/{to}', function ($start, $end, $from, $to) {
+    $dispatched = 0;
+    for ($p = (int) $from; $p <= (int) $to; $p++) {
+        ImportFilmsJob::dispatch((int) $start, (int) $end, $p);
+        $dispatched++;
+    }
     return response()->json([
-        'message'=>"Job encolado {$start}-{$end}, páginas {$from}-{$to}"
+        'message' => "Jobs encolados: {$dispatched} páginas ({$from}-{$to}) para {$start}-{$end}",
     ]);
 });
 

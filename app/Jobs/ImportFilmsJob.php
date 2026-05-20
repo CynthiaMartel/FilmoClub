@@ -1,22 +1,5 @@
 <?php
 
-/**
- * JOB: ImportFilmsJob
- * ----------------------------------------------_____
- * Este Job permite ejecutar la importación de películas en segundo plano de manera asíncrona.
- * En lugar de procesar MUCHAS películas directamente en una SOLA petición HTTP
- * (lo que bloquearía el servidor o daría errores), Laravel envía este trabajo (por eso job)
- * a la "cola de trabajos" (Queue) para que sea procesado de manera asíncrona
- * por un worker (`php artisan queue:work`).
- *
- * De esta forma, la aplicación puede seguir funcionando mientras
- * la importación se realiza en background sin afectar el rendimiento.
- * * En este contexto, el Job ejecuta el método importFromTMDB() del controlador
- * FilmDataController, manteniendo la lógica original del proceso.
- * * Además, el Queue tiene su propia migración para almacenar los trabajos pendientes, de llenado de 
- * datos de la BD.
- */
-
 namespace App\Jobs;
 
 use Illuminate\Bus\Queueable;
@@ -31,53 +14,38 @@ class ImportFilmsJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    // Usamos estas propiedades nativas para que Laravel gestione los errores de forma automática
-    public $tries   = 3;        // Intentos totales si falla antes de marcarlo como "Failed"
-    public $backoff = 60;       // Segundos a esperar entre reintentos (aumentado para dar tiempo a Wikidata)
-    public $timeout = 3600;     // 1 hora — margen amplio aunque el job debería tardar < 5 min tras las optimizaciones
-                                // IMPORTANTE: el worker debe arrancar con --timeout >= este valor
+    // 1 página por job (~20 películas × ~3s ≈ 60s máx) → cabe holgadamente en el worker
+    public $tries   = 3;
+    public $backoff = [30, 60]; // backoff exponencial: 30s primer reintento, 60s segundo
+    public $timeout = 120;      // 2 min: margen ×2 sobre el tiempo real esperado (~60s/página)
 
     public int $yearStart;
     public int $yearEnd;
-    public int $startPage;
-    public int $endPage;
+    public int $page;
 
-    /**
-     * Crea una nueva instancia del Job con los parámetros necesarios para la API
-     */
-    public function __construct(int $yearStart, int $yearEnd, int $startPage = 1, int $endPage = 1)
+    public function __construct(int $yearStart, int $yearEnd, int $page = 1)
     {
         $this->yearStart = $yearStart;
         $this->yearEnd   = $yearEnd;
-        $this->startPage = $startPage;
-        $this->endPage   = $endPage;
+        $this->page      = $page;
     }
 
-    // Ejecuta la lógica del Job
-     
     public function handle(): void
     {
-        Log::info("Job ImportFilmsJob iniciado: Periodo {$this->yearStart}-{$this->yearEnd}, páginas {$this->startPage}-{$this->endPage}");
+        Log::info("ImportFilmsJob: {$this->yearStart}-{$this->yearEnd} · p.{$this->page}");
 
-        
-        // Llamamos directamente a la lógica principal. Si ocurre un error de conexión 
-        // o de API, Laravel captura la excepción y reintenta el Job según $tries.
         app(FilmDataController::class)->importFromTMDB(
             $this->yearStart,
             $this->yearEnd,
-            $this->startPage,
-            $this->endPage
+            $this->page,
+            $this->page
         );
 
-        Log::info("Job ImportFilmsJob finalizado con éxito.");
+        Log::info("ImportFilmsJob OK: {$this->yearStart}-{$this->yearEnd} · p.{$this->page}");
     }
 
-    /**
-    
-     * Este método se dispara automáticamente cuando se han fallado los 3 intentos ($tries)
-     */
-    public function failed(\Throwable $exception)
+    public function failed(\Throwable $exception): void
     {
-        Log::error("El Job de importación falló definitivamente tras {$this->tries} intentos. Error: " . $exception->getMessage());
+        Log::error("ImportFilmsJob falló definitivamente [{$this->yearStart}-{$this->yearEnd} p.{$this->page}]: " . $exception->getMessage());
     }
 }

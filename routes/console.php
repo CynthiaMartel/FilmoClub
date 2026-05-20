@@ -17,31 +17,57 @@ Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
 
-// ── Importación de películas desde TMDB (sin Wikidata) ────────────────────
-// Sin Wikidata: ~0.5s/película en lugar de ~5-8s → 5 páginas = ~100 películas en ~10-15 min
-// Cada job solo hace llamadas TMDB (discover + details+credits+external_ids+alternative_titles)
+// ── Importación de películas desde TMDB ───────────────────────────────────
+// Estrategia: 1 job por página de TMDB (~20 películas · ~60s/job)
+// El worker procesa cada job de forma independiente → sin timeouts, sin failed_jobs.
+//
+// Volumen semanal aproximado:
+//   Recientes  8p × 7días  =  56 jobs → ~1.120 películas/semana
+//   2018-2023  5p × 3días  =  15 jobs →   ~300 películas/semana
+//   2010-2017  5p × 2días  =  10 jobs →   ~200 películas/semana
+//   1990-2009  5p × 2días  =  10 jobs →   ~200 películas/semana
+//   TOTAL                  =  91 jobs → ~1.820 películas/semana  (era ~400)
 
-// Lunes 10:00 — películas recientes (año actual + anterior), páginas 1-5
-Schedule::job(new ImportFilmsJob(now()->subYear()->year, now()->year, 1, 5))
-    ->weeklyOn(1, '10:00')
+// Recientes (año actual + anterior) — diario a las 10:00
+// updateOrCreate garantiza que solo se inserta lo nuevo; lo existente se actualiza
+Schedule::call(function () {
+    $yearStart = now()->subYear()->year;
+    $yearEnd   = now()->year;
+    for ($p = 1; $p <= 8; $p++) {
+        ImportFilmsJob::dispatch($yearStart, $yearEnd, $p);
+    }
+})
+    ->dailyAt('10:00')
     ->name('import-films-recent')
     ->withoutOverlapping();
 
-// Miércoles 10:00 — películas 2018-2023, páginas 1-5
-Schedule::job(new ImportFilmsJob(2018, 2023, 1, 5))
-    ->weeklyOn(3, '10:00')
+// 2018-2023 — lunes, miércoles y viernes a las 11:00
+Schedule::call(function () {
+    for ($p = 1; $p <= 5; $p++) {
+        ImportFilmsJob::dispatch(2018, 2023, $p);
+    }
+})
+    ->cron('0 11 * * 1,3,5')
     ->name('import-films-2018-2023')
     ->withoutOverlapping();
 
-// Viernes 10:00 — películas 2010-2017, páginas 1-5
-Schedule::job(new ImportFilmsJob(2010, 2017, 1, 5))
-    ->weeklyOn(5, '10:00')
+// 2010-2017 — martes y jueves a las 11:00
+Schedule::call(function () {
+    for ($p = 1; $p <= 5; $p++) {
+        ImportFilmsJob::dispatch(2010, 2017, $p);
+    }
+})
+    ->cron('0 11 * * 2,4')
     ->name('import-films-2010-2017')
     ->withoutOverlapping();
 
-// Domingo 10:00 — clásicos 1990-2009, páginas 1-5
-Schedule::job(new ImportFilmsJob(1990, 2009, 1, 5))
-    ->weeklyOn(0, '10:00')
+// 1990-2009 (clásicos) — sábado y domingo a las 11:00
+Schedule::call(function () {
+    for ($p = 1; $p <= 5; $p++) {
+        ImportFilmsJob::dispatch(1990, 2009, $p);
+    }
+})
+    ->cron('0 11 * * 0,6')
     ->name('import-films-classics')
     ->withoutOverlapping();
 
@@ -89,11 +115,13 @@ Schedule::job(new ProcessEventWithAIJob())
     ->name('process-events-ai')
     ->withoutOverlapping();
 
-// ── Cola de trabajos (Hostinger no tiene worker persistente) ───────────────
-// Procesa todos los jobs pendientes y para — se ejecuta cada minuto vía cron
-// --timeout=3600 es el tope por job; el job de importación declara $timeout=3600
-// --max-time=55 hace que el worker se detenga antes de que el cron lo vuelva a lanzar
-Schedule::command('queue:work --stop-when-empty --tries=3 --timeout=3600 --max-time=55')
+// ── Cola de trabajos (Hostinger: sin worker persistente) ──────────────────
+// El cron lanza un worker cada minuto que procesa jobs hasta vaciar la cola o agotar 270s.
+// --timeout=120  → mata un job que supere 2 min (coincide con $timeout de ImportFilmsJob)
+// --max-time=270 → el worker se detiene solo antes de que el siguiente cron lo relance;
+//                  270s < 300s (TTL del prompt cache) → sin penalización de cache miss
+// withoutOverlapping impide que dos workers convivan si la cola está activa
+Schedule::command('queue:work --stop-when-empty --tries=3 --timeout=120 --max-time=270')
     ->everyMinute()
     ->withoutOverlapping()
     ->name('queue-worker');
