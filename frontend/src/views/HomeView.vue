@@ -7,6 +7,7 @@ import RegisterModal from '@/components/RegisterModal.vue'
 import HomeBackdropModal from '@/components/HomeBackdropModal.vue'
 import StarDisplay from '@/components/StarDisplay.vue'
 import { useNavState } from '@/composables/useNavState'
+import { displayTitle } from '@/composables/useFilmTitle'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -468,7 +469,7 @@ watch(() => auth.isAuthenticated, (isAuth) => {
                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-8 h-8 text-white"><path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" /><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
                 </div>
               </div>
-              <h3 class="mt-2 text-[11px] font-bold text-slate-300 truncate group-hover:text-brand transition-colors">{{ film.title }}</h3>
+              <h3 class="mt-2 text-[11px] font-bold text-slate-300 truncate group-hover:text-brand transition-colors">{{ displayTitle(film) }}</h3>
             </div>
           </div>
 
@@ -762,9 +763,9 @@ watch(() => auth.isAuthenticated, (isAuth) => {
 }
 
 /* Mini poster stack (Entradas de mi comunidad — listas / Listas Populares) */
-.mini-poster-stack { overflow: hidden; }
+.mini-poster-stack { overflow: hidden; isolation: isolate; }
 .mini-poster-list { display: flex; height: 135px; position: relative; list-style: none; padding: 0; margin: 0; }
-.mini-poster-item { position: relative; width: 90px; height: 135px; margin-left: -63px; flex-shrink: 0; transition: transform 0.4s ease; }
+.mini-poster-item { position: relative; width: 90px; height: 135px; margin-left: -45px; flex-shrink: 0; transition: transform 0.4s ease; }
 .mini-poster-item:first-child { margin-left: 0; }
 .mini-poster-img { width: 90px; height: 135px; object-fit: cover; border: 1.5px solid #14181c; border-radius: 5px; box-shadow: 8px 0 18px rgba(0,0,0,0.6); }
 .group:hover .mini-poster-item { transform: translateY(-6px) rotate(-1deg); }

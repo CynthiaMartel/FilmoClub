@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '@/services/api'
+import { displayTitle } from '@/composables/useFilmTitle'
 
 const router = useRouter()
 
@@ -93,7 +94,7 @@ onMounted(() => {
                 </svg>
               </div>
             </div>
-            <h3 class="mt-2 text-[11px] font-bold text-slate-300 truncate group-hover:text-brand transition-colors">{{ film.title }}</h3>
+            <h3 class="mt-2 text-[11px] font-bold text-slate-300 truncate group-hover:text-brand transition-colors">{{ displayTitle(film) }}</h3>
             <p v-if="film.year" class="text-[9px] text-slate-600 font-bold uppercase mt-0.5">{{ film.year }}</p>
           </div>
         </div>
@@ -126,7 +127,7 @@ onMounted(() => {
                   </svg>
                 </div>
               </div>
-              <h3 class="mt-2 text-[10px] font-bold text-slate-300 truncate group-hover:text-brand transition-colors leading-tight">{{ film.title }}</h3>
+              <h3 class="mt-2 text-[10px] font-bold text-slate-300 truncate group-hover:text-brand transition-colors leading-tight">{{ displayTitle(film) }}</h3>
               <p v-if="film.year" class="text-[9px] text-slate-600 font-bold uppercase mt-0.5">{{ film.year }}</p>
             </div>
           </div>

@@ -1,5 +1,6 @@
 <script setup>
 import { useRouter } from 'vue-router';
+import { displayTitle } from '@/composables/useFilmTitle';
 
 defineProps({
   films: Array,
@@ -25,7 +26,7 @@ const router = useRouter();
              
         <div class="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center p-4">
           <p class="text-[10px] text-white font-bold uppercase tracking-wider text-center">
-            {{ film.title }}
+            {{ displayTitle(film) }}
           </p>
         </div>
 
@@ -39,11 +40,15 @@ const router = useRouter();
         </button>
       </div>
 
-      <div v-if="showNumbers" 
+      <div v-if="showNumbers"
            class="absolute -top-2 -left-2 bg-slate-900 border border-slate-700 text-indigo-400 text-[10px] font-black w-6 h-6 flex items-center justify-center rounded shadow-2xl z-10"
            :aria-label="`Posición ${index + 1}`">
         {{ index + 1 }}
       </div>
+
+      <p class="mt-1.5 text-[10px] font-bold text-slate-400 truncate group-hover:text-white transition-colors leading-tight">
+        {{ displayTitle(film) }}
+      </p>
     </div>
   </div>
 </template>

@@ -5,6 +5,7 @@ import { storeToRefs } from 'pinia'
 import { useAuthStore } from '@/stores/auth'
 import { useUserFilmActionsStore } from '@/stores/user_film_actions'
 import api from '@/services/api'
+import { displayTitle as getDisplayTitle } from '@/composables/useFilmTitle'
 
 // Componentes
 import CommentSection from '@/components/CommentSection.vue'
@@ -14,6 +15,7 @@ import PersonModal from '@/components/CastCrewModal.vue'
 import FilmDetailsModal from '@/components/FilmDetailsModal.vue'
 import AddToListModal from '@/components/AddToListModal.vue'
 import WatchProviders from '@/components/WatchProviders.vue'
+import ShareButton from '@/components/ShareButton.vue'
 
 const route = useRoute()
 const auth = useAuthStore()
@@ -124,9 +126,7 @@ const originCountries = computed(() => {
     })
 })
 
-const displayTitle = computed(() =>
-  film.value?.alternative_titles?.es || film.value?.title
-)
+const displayTitle = computed(() => getDisplayTitle(film.value))
 
 // Sinopsis: traducción
 const showTranslated = ref(false)
@@ -299,9 +299,12 @@ onMounted(fetchFilm)
           <div class="flex flex-col pt-10 md:pt-20 max-w-full md:max-w-[800px]">
             
             <section class="film-header mb-8">
-              <h1 class="text-4xl sm:text-5xl font-black text-white tracking-tight leading-tight mb-4 drop-shadow-lg font-serif">
-                {{ displayTitle }}
-              </h1>
+              <div class="flex items-start gap-3 mb-4">
+                <h1 class="flex-1 text-4xl sm:text-5xl font-black text-white tracking-tight leading-tight drop-shadow-lg font-serif">
+                  {{ displayTitle }}
+                </h1>
+                <ShareButton />
+              </div>
 
               <p
                 v-if="film.original_title && film.original_title !== displayTitle"
@@ -653,7 +656,7 @@ onMounted(fetchFilm)
 /* Poster stack para listas */
 .entry-poster-wrap { height: 110px; }
 .entry-poster-stack { display: flex; height: 110px; position: relative; }
-.entry-poster-item { position: relative; width: 76px; height: 110px; margin-left: -55px; transition: transform 0.35s ease; }
+.entry-poster-item { position: relative; width: 76px; height: 110px; margin-left: -38px; transition: transform 0.35s ease; }
 .entry-poster-item:first-child { margin-left: 0; }
 .entry-poster-img { width: 76px; height: 110px; object-fit: cover; border: 1.5px solid #0f1113; border-radius: 6px; box-shadow: 8px 0 20px rgba(0,0,0,0.6); }
 .group:hover .entry-poster-item { transform: translateY(-6px) rotate(-1deg); }
