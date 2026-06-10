@@ -24,8 +24,19 @@
     RewriteCond %{REQUEST_FILENAME} -d
     RewriteRule ^ - [L]
 
-    # 3. Todo lo demás (rutas de Vue Router) → Vue SPA
+    # 3. Bots de mensajería/redes sociales → Laravel para OG tags
+    RewriteCond %{HTTP_USER_AGENT} (WhatsApp|Telegram|facebookexternalhit|Facebot|Twitterbot|Discordbot|Slackbot-LinkExpanding|LinkedInBot|Pinterest|Googlebot-Image|Applebot|baiduspider|SkypeUriPreview) [NC]
+    RewriteCond %{REQUEST_URI} ^/(films/[0-9]+|entry/[a-z_]+/[0-9]+|profile/[^/]+|news/[0-9]+|post-reed/[0-9]+)/?$
+    RewriteRule ^ backend-api/index.php [L,QSA]
+
+    # 4. Todo lo demás (rutas de Vue Router) → Vue SPA
     RewriteRule ^ index.html [L]
+</IfModule>
+
+<IfModule mod_mime.c>
+    AddType application/manifest+json  .webmanifest
+    AddType text/javascript            .js
+    AddType image/png                  .png
 </IfModule>
 
 <IfModule mod_headers.c>
@@ -51,5 +62,5 @@
     # - font-src: Bootstrap Icons CDN + data URIs
     # - frame-src: Cloudflare Turnstile crea un iframe interno para el challenge
     # - worker-src: service worker (sw.js + workbox)
-    Header always set Content-Security-Policy "default-src 'self'; script-src 'self' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: https://image.tmdb.org https:; font-src 'self' https://cdn.jsdelivr.net data:; connect-src 'self'; worker-src 'self'; frame-src https://challenges.cloudflare.com; object-src 'none'; base-uri 'self'; form-action 'self'; manifest-src 'self'; upgrade-insecure-requests"
+    Header always set Content-Security-Policy "default-src 'self'; script-src 'self' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://image.tmdb.org https:; font-src 'self' data:; connect-src 'self'; worker-src 'self'; frame-src https://challenges.cloudflare.com; object-src 'none'; base-uri 'self'; form-action 'self'; manifest-src 'self'; upgrade-insecure-requests"
 </IfModule>

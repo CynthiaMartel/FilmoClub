@@ -4,7 +4,12 @@ use App\Http\Controllers\FilmDataController;
 use App\Http\Controllers\TestsDBApisController;
 use App\Jobs\ImportFilmsJob;
 
+use App\Models\Film;
+use App\Models\Post;
+use App\Models\User;
+use App\Models\UserEntry;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Str;
 
 
 // web.php -> contiene rutas de mantenimiento y utilidades de desarrollo, como rutas de funcionamiento "interno", no de uso "público" para usuarios de la app
@@ -13,6 +18,37 @@ use Illuminate\Support\Facades\Route;
 Route::get('/', function () {
     return view('welcome');
 });
+
+// OG tags para bots de mensajería — solo llegan aquí via .htaccess
+Route::get('/films/{id}', function ($id) {
+    $film = Film::find((int) $id);
+    if (!$film) abort(404);
+    return response(view('og-film', compact('film')))->header('Cache-Control', 'public, max-age=3600');
+})->where('id', '[0-9]+');
+
+Route::get('/entry/{type}/{id}', function ($type, $id) {
+    $entry = UserEntry::with(['user:id,name', 'films:idFilm,title,frame'])->find((int) $id);
+    if (!$entry) abort(404);
+    return response(view('og-entry', compact('entry')))->header('Cache-Control', 'public, max-age=3600');
+})->where('id', '[0-9]+');
+
+Route::get('/profile/{username}', function ($username) {
+    $user = User::with('profile')->where('name', $username)->first();
+    if (!$user) abort(404);
+    return response(view('og-profile', compact('user')))->header('Cache-Control', 'public, max-age=3600');
+});
+
+Route::get('/news/{id}', function ($id) {
+    $post = Post::with('films:idFilm,title,frame')->find((int) $id);
+    if (!$post || !$post->visible) abort(404);
+    return response(view('og-post', compact('post')))->header('Cache-Control', 'public, max-age=3600');
+})->where('id', '[0-9]+');
+
+Route::get('/post-reed/{id}', function ($id) {
+    $post = Post::with('films:idFilm,title,frame')->find((int) $id);
+    if (!$post || !$post->visible) abort(404);
+    return response(view('og-post', compact('post')))->header('Cache-Control', 'public, max-age=3600');
+})->where('id', '[0-9]+');
 
 /*
 |--------------------------------------------------------------------------
@@ -41,19 +77,25 @@ Route::get('/wikidata/test_title_wikidata/{title}', [TestsDBApisController::clas
 |  --RUTAS IMPORTACIÓN DATOS A BD--
 |--------------------------------------------------------------------------
 */
-// --Rutas para importar desde APIs wikidata y tmdb --> poblar y guardar en BD (si en la función se cambia la variable limit por un núnero reducido, puede servir de prueba rápida para ver si se puebla la BD correctamente)
-Route::post('/films/import/{yearStart}/{yearEnd}/{startPage?}/{endPage?}', [FilmDataController::class, 'importFromTMDB'])->name('films.import');
+// Importación directa (síncrona) desde Postman — modo discover por defecto
+// GET /films/import/2026-01-01/2026-12-31/1  → inserta films nuevos de la página 1
+Route::post('/films/import/{dateFrom}/{dateTo}/{startPage?}/{endPage?}', [FilmDataController::class, 'importFromTMDB'])->name('films.import');
 
-// Ruta manual para encolar importación desde Postman/Web
-// Despacha 1 job por página (from..to) — misma estrategia que el scheduler
-Route::post('/films/import/{start}/{end}/{from}/{to}', function ($start, $end, $from, $to) {
+// Ruta manual para encolar jobs desde Postman/Web
+// POST /films/import-queue/2026-01-01/2026-12-31/1/5?mode=discover
+// mode=discover → onlyNew=true (release_date.desc) | mode=sync → onlyNew=false (popularity.desc)
+Route::post('/films/import-queue/{dateFrom}/{dateTo}/{from}/{to}', function ($dateFrom, $dateTo, $from, $to) {
+    $mode    = request('mode', 'discover');
+    $onlyNew = $mode !== 'sync';
+    $sortBy  = $onlyNew ? 'release_date.desc' : 'popularity.desc';
+
     $dispatched = 0;
     for ($p = (int) $from; $p <= (int) $to; $p++) {
-        ImportFilmsJob::dispatch((int) $start, (int) $end, $p);
+        ImportFilmsJob::dispatch($dateFrom, $dateTo, $p, $sortBy, $onlyNew);
         $dispatched++;
     }
     return response()->json([
-        'message' => "Jobs encolados: {$dispatched} páginas ({$from}-{$to}) para {$start}-{$end}",
+        'message' => "Jobs encolados: {$dispatched} páginas ({$from}→{$to}) | {$dateFrom}→{$dateTo} | modo: {$mode}",
     ]);
 });
 
