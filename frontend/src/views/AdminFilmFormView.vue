@@ -615,6 +615,33 @@ onUnmounted(() => {
               </svg>
               Sin errores en la cola
             </div>
+
+            <!-- Últimas películas insertadas en BD -->
+            <div v-if="monitorData?.recently_imported?.length" class="space-y-2">
+              <div class="flex items-center justify-between">
+                <p class="text-[10px] font-bold uppercase tracking-widest text-slate-500">Últimas añadidas a BD</p>
+                <span class="text-[10px] text-slate-600">{{ monitorData.recent_total.toLocaleString('es-ES') }} películas en total</span>
+              </div>
+              <div class="grid grid-cols-5 sm:grid-cols-10 gap-2">
+                <router-link
+                  v-for="film in monitorData.recently_imported"
+                  :key="film.id"
+                  :to="{ name: 'film-detail', params: { id: film.id } }"
+                  class="group relative"
+                  :title="`${film.title} (${film.year}) · ${new Date(film.imported_at).toLocaleDateString('es-ES')}`"
+                >
+                  <div class="aspect-[2/3] rounded overflow-hidden border border-slate-700 group-hover:border-brand transition-all">
+                    <img
+                      :src="film.frame || '/default-poster.webp'"
+                      :alt="film.title"
+                      class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      loading="lazy"
+                    />
+                  </div>
+                  <p class="mt-1 text-[9px] text-slate-500 truncate group-hover:text-brand transition-colors leading-tight">{{ film.title }}</p>
+                </router-link>
+              </div>
+            </div>
           </div>
         </section>
 
