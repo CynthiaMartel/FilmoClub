@@ -18,57 +18,116 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 // ── Importación de películas desde TMDB ───────────────────────────────────
-// Estrategia: 1 job por página de TMDB (~20 películas · ~60s/job)
-// El worker procesa cada job de forma independiente → sin timeouts, sin failed_jobs.
+// Dos modos:
+//   DISCOVER (onlyNew=true)  → solo inserta films que no existen en BD (cast completo)
+//                              El EXISTS por film ya existente es O(1) → muy barato
+//   SYNC     (onlyNew=false) → actualiza vote_average/poster/backdrop de existentes
+//                              Sin llamadas extra a TMDB (solo respuesta discover)
 //
 // Volumen semanal aproximado:
-//   Recientes  8p × 7días  =  56 jobs → ~1.120 películas/semana
-//   2018-2023  5p × 3días  =  15 jobs →   ~300 películas/semana
-//   2010-2017  5p × 2días  =  10 jobs →   ~200 películas/semana
-//   1990-2009  5p × 2días  =  10 jobs →   ~200 películas/semana
-//   TOTAL                  =  91 jobs → ~1.820 películas/semana  (era ~400)
+//   Discover reciente   5p × 7d  =  35 jobs → estrenos últimos 90 días
+//   Discover backfill  72p × 1d  =  72 jobs → rellena huecos históricos (rotación diaria)
+//   Sync reciente       8p × 7d  =  56 jobs → actualización ligera 2025-2026
+//   Sync histórico     15p × 7d  =  35 jobs → actualización ligera 2018-clásicos
+//   TOTAL                        = ~198 jobs/semana
 
-// Recientes (año actual + anterior) — diario a las 10:00
-// updateOrCreate garantiza que solo se inserta lo nuevo; lo existente se actualiza
+// ── DISCOVER reciente: estrenos (últimos 90 días + 30 futuros) — diario 10:30
+// onlyNew=true, release_date.desc → garantiza que los estrenos entran en BD al día siguiente
 Schedule::call(function () {
-    $yearStart = now()->subYear()->year;
-    $yearEnd   = now()->year;
+    $from = now()->subDays(90)->format('Y-m-d');
+    $to   = now()->addDays(30)->format('Y-m-d');
+    for ($p = 1; $p <= 5; $p++) {
+        ImportFilmsJob::dispatch($from, $to, $p, 'release_date.desc', true);
+    }
+})
+    ->dailyAt('10:30')
+    ->name('import-films-discover-recent')
+    ->withoutOverlapping();
+
+// ── DISCOVER backfill: rellena huecos históricos (rotación semanal)
+// Cada día de la semana cubre un bloque de años con páginas profundas (1-15).
+// onlyNew=true → salta films ya en BD con un EXISTS rápido, importa solo lo que falta.
+// Con el tiempo, las páginas 1-8 (ya cubiertas) se saltan casi todas y el job
+// es más y más ligero conforme la BD se complete.
+
+// Lunes 12:00 — últimos 2 años (captura los más recientes no cubiertos por discover)
+Schedule::call(function () {
+    $from = now()->subYear()->startOfYear()->format('Y-m-d');
+    $to   = now()->endOfYear()->format('Y-m-d');
+    for ($p = 1; $p <= 15; $p++) {
+        ImportFilmsJob::dispatch($from, $to, $p, 'popularity.desc', true);
+    }
+})->cron('0 12 * * 1')->name('import-films-backfill-recent')->withoutOverlapping();
+
+// Martes 12:00 — 2020-2024
+Schedule::call(function () {
+    for ($p = 1; $p <= 15; $p++) {
+        ImportFilmsJob::dispatch('2020-01-01', '2024-12-31', $p, 'popularity.desc', true);
+    }
+})->cron('0 12 * * 2')->name('import-films-backfill-2020-2024')->withoutOverlapping();
+
+// Miércoles 12:00 — 2015-2019
+Schedule::call(function () {
+    for ($p = 1; $p <= 15; $p++) {
+        ImportFilmsJob::dispatch('2015-01-01', '2019-12-31', $p, 'popularity.desc', true);
+    }
+})->cron('0 12 * * 3')->name('import-films-backfill-2015-2019')->withoutOverlapping();
+
+// Jueves 12:00 — 2010-2014
+Schedule::call(function () {
+    for ($p = 1; $p <= 15; $p++) {
+        ImportFilmsJob::dispatch('2010-01-01', '2014-12-31', $p, 'popularity.desc', true);
+    }
+})->cron('0 12 * * 4')->name('import-films-backfill-2010-2014')->withoutOverlapping();
+
+// Viernes 12:00 — clásicos 1990-2009
+Schedule::call(function () {
+    for ($p = 1; $p <= 12; $p++) {
+        ImportFilmsJob::dispatch('1990-01-01', '2009-12-31', $p, 'popularity.desc', true);
+    }
+})->cron('0 12 * * 5')->name('import-films-backfill-classics')->withoutOverlapping();
+
+// ── SYNC recientes (año actual + anterior) — diario 10:00
+// onlyNew=false → solo actualiza vote_average/poster/backdrop, 0 llamadas extra a TMDB
+Schedule::call(function () {
+    $from = now()->subYear()->startOfYear()->format('Y-m-d');
+    $to   = now()->endOfYear()->format('Y-m-d');
     for ($p = 1; $p <= 8; $p++) {
-        ImportFilmsJob::dispatch($yearStart, $yearEnd, $p);
+        ImportFilmsJob::dispatch($from, $to, $p, 'popularity.desc', false);
     }
 })
     ->dailyAt('10:00')
-    ->name('import-films-recent')
+    ->name('import-films-sync-recent')
     ->withoutOverlapping();
 
-// 2018-2023 — lunes, miércoles y viernes a las 11:00
+// SYNC 2018-2023 — lunes, miércoles y viernes a las 11:00
 Schedule::call(function () {
     for ($p = 1; $p <= 5; $p++) {
-        ImportFilmsJob::dispatch(2018, 2023, $p);
+        ImportFilmsJob::dispatch('2018-01-01', '2023-12-31', $p, 'popularity.desc', false);
     }
 })
     ->cron('0 11 * * 1,3,5')
-    ->name('import-films-2018-2023')
+    ->name('import-films-sync-2018-2023')
     ->withoutOverlapping();
 
-// 2010-2017 — martes y jueves a las 11:00
+// SYNC 2010-2017 — martes y jueves a las 11:00
 Schedule::call(function () {
     for ($p = 1; $p <= 5; $p++) {
-        ImportFilmsJob::dispatch(2010, 2017, $p);
+        ImportFilmsJob::dispatch('2010-01-01', '2017-12-31', $p, 'popularity.desc', false);
     }
 })
     ->cron('0 11 * * 2,4')
-    ->name('import-films-2010-2017')
+    ->name('import-films-sync-2010-2017')
     ->withoutOverlapping();
 
-// 1990-2009 (clásicos) — sábado y domingo a las 11:00
+// SYNC clásicos (1990-2009) — sábado y domingo a las 11:00
 Schedule::call(function () {
     for ($p = 1; $p <= 5; $p++) {
-        ImportFilmsJob::dispatch(1990, 2009, $p);
+        ImportFilmsJob::dispatch('1990-01-01', '2009-12-31', $p, 'popularity.desc', false);
     }
 })
     ->cron('0 11 * * 0,6')
-    ->name('import-films-classics')
+    ->name('import-films-sync-classics')
     ->withoutOverlapping();
 
 // ── Enriquecimiento de awards/nominations/festivals desde Wikidata ─────────

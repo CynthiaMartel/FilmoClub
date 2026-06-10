@@ -14,38 +14,56 @@ class ImportFilmsJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    // 1 página por job (~20 películas × ~3s ≈ 60s máx) → cabe holgadamente en el worker
     public $tries   = 3;
-    public $backoff = [30, 60]; // backoff exponencial: 30s primer reintento, 60s segundo
-    public $timeout = 120;      // 2 min: margen ×2 sobre el tiempo real esperado (~60s/página)
+    public $backoff = [30, 60];
+    public $timeout = 120;
 
-    public int $yearStart;
-    public int $yearEnd;
-    public int $page;
+    public string $dateFrom;
+    public string $dateTo;
+    public int    $page;
+    public string $sortBy;
+    public bool   $onlyNew;
 
-    public function __construct(int $yearStart, int $yearEnd, int $page = 1)
-    {
-        $this->yearStart = $yearStart;
-        $this->yearEnd   = $yearEnd;
-        $this->page      = $page;
+    /**
+     * @param string $dateFrom   Fecha inicio YYYY-MM-DD (gte en TMDB)
+     * @param string $dateTo     Fecha fin YYYY-MM-DD (lte en TMDB)
+     * @param int    $page       Página de TMDB a importar
+     * @param string $sortBy     Criterio TMDB: 'popularity.desc' | 'release_date.desc'
+     * @param bool   $onlyNew    true → solo inserta films que no existan en BD (discover)
+     *                           false → actualiza vote_average/poster/backdrop de existentes (sync)
+     */
+    public function __construct(
+        string $dateFrom,
+        string $dateTo,
+        int    $page    = 1,
+        string $sortBy  = 'popularity.desc',
+        bool   $onlyNew = false
+    ) {
+        $this->dateFrom = $dateFrom;
+        $this->dateTo   = $dateTo;
+        $this->page     = $page;
+        $this->sortBy   = $sortBy;
+        $this->onlyNew  = $onlyNew;
     }
 
     public function handle(): void
     {
-        Log::info("ImportFilmsJob: {$this->yearStart}-{$this->yearEnd} · p.{$this->page}");
+        $mode = $this->onlyNew ? 'discover' : 'sync';
+        Log::info("ImportFilmsJob [{$mode}]: {$this->dateFrom}→{$this->dateTo} · p.{$this->page} · {$this->sortBy}");
 
         app(FilmDataController::class)->importFromTMDB(
-            $this->yearStart,
-            $this->yearEnd,
+            $this->dateFrom,
+            $this->dateTo,
             $this->page,
-            $this->page
+            $this->sortBy,
+            $this->onlyNew
         );
 
-        Log::info("ImportFilmsJob OK: {$this->yearStart}-{$this->yearEnd} · p.{$this->page}");
+        Log::info("ImportFilmsJob OK [{$mode}]: p.{$this->page}");
     }
 
     public function failed(\Throwable $exception): void
     {
-        Log::error("ImportFilmsJob falló definitivamente [{$this->yearStart}-{$this->yearEnd} p.{$this->page}]: " . $exception->getMessage());
+        Log::error("ImportFilmsJob falló [{$this->dateFrom}→{$this->dateTo} p.{$this->page}]: " . $exception->getMessage());
     }
 }
