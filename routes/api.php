@@ -644,24 +644,18 @@ Route::get('/events/public', [EventController::class, 'publicIndex'])
     ->name('api.events.public');
 
 Route::prefix('events')->group(function () {
-    // Listado con filtros y paginación
+    // Rutas estáticas primero — evita colisiones con /{id} en Apache/Hostinger
     Route::get('/',                          [EventController::class, 'index']);
-    // Creación manual de evento
     Route::post('/',                         [EventController::class, 'store']);
-    // Detalle de un evento
-    Route::get('/{id}',                      [EventController::class, 'show']);
-    // Cambiar estado (confirmed / rejected / needs_review / pending)
-    Route::patch('/{id}/status',             [EventController::class, 'updateStatus']);
-    // Editar datos del evento (corrección manual post-IA)
-    Route::patch('/{id}',                    [EventController::class, 'update']);
-    // Eliminar evento
-    Route::delete('/{id}',                   [EventController::class, 'destroy']);
-
-    // Fuentes de eventos
     Route::get('/sources/list',              [EventController::class, 'sources']);
     Route::post('/sources/{id}/check-now',   [EventController::class, 'checkNow']);
     Route::patch('/sources/{id}',            [EventController::class, 'updateSource']);
-    // Procesamiento IA manual (síncrono)
     Route::post('/process-ai',               [EventController::class, 'processAI']);
+
+    // Rutas con parámetro dinámico — siempre al final
+    Route::get('/{id}',                      [EventController::class, 'show']);
+    Route::patch('/{id}/status',             [EventController::class, 'updateStatus']);
+    Route::patch('/{id}',                    [EventController::class, 'update']);
+    Route::delete('/{id}',                   [EventController::class, 'destroy']);
 });
 

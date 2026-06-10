@@ -9,7 +9,7 @@ const isLoading  = ref(false)
 const error      = ref(null)
 
 const filters = ref({
-  period:     'ongoing', // ongoing | upcoming | week | month | all
+  period:     'all', // ongoing | upcoming | week | month | all
   island:     '',
   event_type: '',
   page:       1,
@@ -80,7 +80,7 @@ const dateParams = computed(() => {
     return { date_from: fmt(today), date_to: fmt(end) }
   }
   if (filters.value.period === 'all') {
-    return {}
+    return { all: 1 }
   }
   return { upcoming: 1 }
 })
@@ -203,8 +203,12 @@ const clearType   = () => { filters.value.event_type = '' }
     <div v-else-if="events.length === 0" class="py-20 text-center">
       <div class="text-4xl mb-4">🎬</div>
       <p class="text-slate-500 text-sm max-w-xs mx-auto">
-        No hay eventos programados
-        {{ filters.island || filters.event_type ? 'con los filtros seleccionados' : 'próximamente' }}.
+        No hay eventos
+        {{ filters.island || filters.event_type
+            ? 'con los filtros seleccionados'
+            : filters.period === 'all'
+              ? 'en la agenda'
+              : 'próximamente' }}.
       </p>
     </div>
 

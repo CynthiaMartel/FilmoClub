@@ -80,8 +80,18 @@ class EventController extends Controller
      */
     public function publicIndex(Request $request): JsonResponse
     {
-        $query = CinemaEvent::where('status', 'confirmed')
-            ->orderBy('start_date', 'asc');
+        $isAll = $request->boolean('all');
+
+        $query = CinemaEvent::where('status', 'confirmed');
+
+        if ($isAll) {
+            // Próximos primero (ASC), luego pasados del más reciente al más antiguo (DESC)
+            $query->orderByRaw('CASE WHEN start_date >= CURDATE() THEN 0 ELSE 1 END ASC')
+                  ->orderByRaw('CASE WHEN start_date >= CURDATE() THEN start_date ELSE NULL END ASC')
+                  ->orderByRaw('CASE WHEN start_date < CURDATE() THEN start_date ELSE NULL END DESC');
+        } else {
+            $query->orderBy('start_date', 'asc');
+        }
 
         if ($request->filled('island')) {
             $query->byIsland($request->island);
@@ -95,7 +105,7 @@ class EventController extends Controller
             $query->upcoming();
         } elseif ($request->filled('date_from') && $request->filled('date_to')) {
             $query->inRange($request->date_from, $request->date_to);
-        } else {
+        } elseif (! $isAll) {
             $query->upcoming();
         }
 
