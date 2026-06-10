@@ -3,6 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import api from '@/services/api' // Instancia de Axios
+import ShareButton from '@/components/ShareButton.vue'
 
 // --- STORES Y ROUTER 
 const auth = useAuthStore()
@@ -172,10 +173,11 @@ onMounted(() => {
                             <p>{{ post.subtitle }}</p>
                         </div>
 
-                        <div class="mt-1">
+                        <div class="mt-1 flex items-center justify-between">
                             <a @click.prevent="goToPost(post.id)" href="#" class="text-[10px] font-black uppercase tracking-[0.1em] text-[#678] hover:text-white transition-colors border-b border-transparent hover:border-white/50 pb-0.5">
                                 Leer Noticia
                             </a>
+                            <ShareButton variant="icon" :url="'/post-reed/' + post.id" />
                         </div>
 
                         <div v-if="isAdminOrEditor" class="flex gap-3 pt-3 border-t border-white/5 mt-1">

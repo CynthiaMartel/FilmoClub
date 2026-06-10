@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import api from '@/services/api'
 import LoginModal from '@/components/LoginModal.vue'
+import ShareButton from '@/components/ShareButton.vue'
 import { avatarUrl } from '@/composables/useAvatar'
 import DOMPurify from 'dompurify'
 
@@ -61,13 +62,16 @@ const fetchPost = async () => {
 
 const formatDate = (dateString) => {
     if (!dateString) return ''
-    return new Date(dateString).toLocaleDateString('es-ES', { 
-        day: '2-digit', month: 'long', year: 'numeric' 
+    return new Date(dateString).toLocaleDateString('es-ES', {
+        day: '2-digit', month: 'long', year: 'numeric'
     })
 }
 
 const goBack = () => router.back()
-const goProfile = (username) => router.push({ name: 'user-profile', params: { username } })
+const goProfile = (username) => {
+    if (username) router.push({ name: 'user-profile', params: { username } })
+}
+const goFilm = (filmId) => router.push({ name: 'film-detail', params: { id: filmId } })
 
 // --- MÉTODOS DE COMENTARIOS ---
 const openLogin = () => { isLoginOpen.value = true }
@@ -86,15 +90,15 @@ const handlePostComment = async () => {
     if (!newComment.value.trim()) return;
     isSending.value = true;
     try {
-        const { data } = await api.post(`/comments/${type}/${post.value.id}/create`, { 
-            comment: newComment.value 
+        const { data } = await api.post(`/comments/${type}/${post.value.id}/create`, {
+            comment: newComment.value
         });
         comments.value.unshift(data.data || data);
         newComment.value = '';
     } catch (e) {
         if(e.response?.status === 401) openLogin();
-    } finally { 
-        isSending.value = false; 
+    } finally {
+        isSending.value = false;
     }
 };
 
@@ -121,7 +125,7 @@ watch(() => route.params.id, () => {
 
 <template>
   <div class="min-h-screen w-full bg-[#14181c] text-[#9ab] font-sans overflow-x-hidden selection:bg-[#BE2B0C]/40 pb-20">
-    
+
     <nav class="sticky top-0 z-50 bg-[#14181c]/90 backdrop-blur-md border-b border-white/5 px-4 sm:px-6 py-4">
         <div class="content-wrap mx-auto max-w-[1100px] flex items-center justify-between">
             <button @click="goBack" class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 hover:text-white transition-colors flex items-center gap-2">
@@ -144,139 +148,186 @@ watch(() => route.params.id, () => {
     </div>
 
     <div v-else class="content-wrap mx-auto max-w-[1100px] px-6 md:px-10 lg:px-0 py-10 relative z-10">
-        
-        <article class="max-w-[800px] mx-auto">
-            
-            <header class="mb-10 text-left">
-                
-                <div class="flex flex-col items-start gap-4 mb-6">
-                    <span v-if="!post.visible" class="text-[9px] font-black bg-yellow-600 text-black px-3 py-1 rounded-full uppercase tracking-widest shadow-lg mb-2">
-                        Borrador Privado
-                    </span>
 
-                    <div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-[#BE2B0C]/30 bg-[#BE2B0C]/5 shadow-[0_0_20px_rgba(190,43,12,0.15)] backdrop-blur-sm">
-                        <span class="w-1.5 h-1.5 rounded-full bg-[#BE2B0C] animate-pulse"></span>
-                        <span class="text-[10px] font-black text-[#BE2B0C] uppercase tracking-[0.25em]">
-                            Noticia Destacada
-                        </span>
-                    </div>
+        <div>
 
-                    <span class="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-1">
-                        {{ formatDate(post.created_at) }}
-                    </span>
-                </div>
+            <!-- ARTÍCULO PRINCIPAL -->
+            <article>
 
-                <h1 class="text-3xl md:text-5xl lg:text-6xl font-serif font-black text-white leading-[1.1] mb-6 tracking-tight text-left">
-                    {{ post.title }}
-                </h1>
+                <header class="mb-10 text-left">
+                    <div class="flex flex-col sm:flex-row sm:items-start sm:gap-8 lg:gap-12">
 
-                <p class="text-lg md:text-xl text-slate-400 font-light leading-relaxed mb-8 text-left">
-                    {{ post.subtitle }}
-                </p>
+                        <!-- Columna izquierda: meta + título + subtítulo + autor -->
+                        <div class="flex-1 min-w-0">
+                            <div class="flex flex-col items-start gap-4 mb-6">
+                                <span v-if="!post.visible" class="text-[9px] font-black bg-yellow-600 text-black px-3 py-1 rounded-full uppercase tracking-widest shadow-lg mb-2">
+                                    Borrador Privado
+                                </span>
 
-                <div class="flex items-center justify-start gap-3 pt-6 border-t border-white/5 w-full">
-                    <div class="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center text-xs font-bold text-white overflow-hidden border border-white/10 shadow-lg">
-                        {{ editorInitials }}
-                    </div>
-                    <div class="text-left">
-                        <p class="text-[9px] text-slate-500 uppercase tracking-widest font-bold mb-0.5">Escrito por</p>
-                        <p class="text-sm text-white font-bold">{{ post.editorName || 'Redacción' }}</p>
-                    </div>
-                </div>
-            </header>
-
-            <figure class="w-full aspect-video rounded-xl overflow-hidden shadow-2xl border border-white/10 mb-12 bg-[#1b2228] relative group">
-                <img 
-                    :src="post.img || '/default-poster.webp'" 
-                    :alt="post.title"
-                    class="w-full h-full object-cover"
-                >
-                <div v-if="post.film" class="absolute bottom-4 right-4 bg-black/80 backdrop-blur px-3 py-2 rounded flex items-center gap-3 border border-white/10">
-                     <img :src="post.film.poster_url" class="w-6 h-8 object-cover rounded shadow-sm">
-                     <div class="text-left">
-                        <p class="text-[8px] text-slate-400 uppercase tracking-widest font-bold">Sobre el film</p>
-                        <p class="text-xs text-white font-bold truncate max-w-[150px]">{{ post.film.title }}</p>
-                     </div>
-                </div>
-            </figure>
-
-            <div class="post-content text-slate-300 leading-relaxed text-lg mb-16 font-sans font-light text-left">
-                <div class="ck-content" v-html="safeContent"></div>
-            </div>
-
-            <section class="border-t border-slate-800/50 pt-12">
-                <div class="flex items-center gap-3 mb-10">
-                    <span class="w-1.5 h-6 bg-[#BE2B0C] rounded-full shadow-[0_0_10px_#BE2B0C]"></span>
-                    <h3 class="text-[18px] font-black uppercase tracking-[3px] text-slate-400">
-                        Comunidad ({{ comments.length }})
-                    </h3>
-                </div>
-
-                <div class="space-y-4">
-                    <div v-if="isAuthenticated" class="mb-12 group">
-                        <textarea 
-                            v-model="newComment" 
-                            placeholder="¿Qué te parece esta entrada?" 
-                            class="w-full bg-slate-900/40 border border-slate-800 rounded-2xl p-5 text-slate-200 focus:ring-2 focus:ring-[#BE2B0C]/30 focus:border-[#BE2B0C]/50 outline-none mb-4 resize-none transition-all text-sm shadow-inner" 
-                            rows="3"
-                        ></textarea>
-                        <div class="flex justify-end">
-                            <button 
-                                @click="handlePostComment" 
-                                :disabled="isSending || !newComment.trim()" 
-                                class="bg-[#BE2B0C] hover:bg-[#a02208] text-white font-black py-3 px-10 rounded-full text-[11px] uppercase tracking-[2px] transition-all shadow-xl cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                {{ isSending ? 'Enviando...' : 'Publicar' }}
-                            </button>
-                        </div>
-                    </div>
-                    <div v-else class="bg-slate-800/30 p-10 rounded-2xl border border-dashed border-slate-800 text-center">
-                        <p class="text-slate-500 font-black uppercase text-[10px] tracking-widest">
-                            ¡Haz <span @click="openLogin" class="text-[#BE2B0C] cursor-pointer hover:underline">login</span> para participar!
-                        </p>
-                    </div>
-                </div>
-
-                <div class="space-y-6">
-                    <div v-for="comment in comments" :key="comment.id" class="flex gap-5 animate-fade-in group text-left">
-                        <div @click="goProfile(comment.user.name)"
-                            class="w-11 h-11 bg-slate-800 rounded-full flex items-center justify-center text-[#BE2B0C] font-black shrink-0 border border-slate-700 text-lg shadow-md cursor-pointer hover:scale-105 transition-transform overflow-hidden">
-                            <img v-if="avatarUrl(comment.user?.avatar)" :src="avatarUrl(comment.user?.avatar)" class="w-full h-full object-cover">
-                            <span v-else>{{ comment.user?.name?.charAt(0).toUpperCase() || 'U' }}</span>
-                        </div>
-                        
-                        <div class="flex-1">
-                            <div class="bg-slate-800/30 border border-slate-800/60 p-5 rounded-2xl rounded-tl-none group-hover:border-slate-700 transition-colors">
-                                <div class="flex items-center justify-between mb-2">
-                                    <span @click="goProfile(comment.user.name)" class="text-white font-bold text-sm cursor-pointer hover:text-[#BE2B0C] transition-colors">
-                                        @{{ comment.user?.name }}
-                                    </span>
-                                    <span class="text-[9px] text-slate-500 uppercase font-black tracking-tighter">
-                                        {{ formatCommentDate(comment.created_at) }}
+                                <div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-[#BE2B0C]/30 bg-[#BE2B0C]/5 shadow-[0_0_20px_rgba(190,43,12,0.15)] backdrop-blur-sm">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-[#BE2B0C] animate-pulse"></span>
+                                    <span class="text-[10px] font-black text-[#BE2B0C] uppercase tracking-[0.25em]">
+                                        Noticia Destacada
                                     </span>
                                 </div>
-                                <p class="text-slate-300 text-sm leading-relaxed font-light">
-                                    {{ comment.comment }}
-                                </p>
+
+                                <span class="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-1">
+                                    {{ formatDate(post.created_at) }}
+                                </span>
                             </div>
-                            
-                            <button 
-                                v-if="currentUserId === comment.user_id" 
-                                @click="handleDeleteComment(comment.id)" 
-                                class="ml-4 mt-2 text-[9px] text-slate-600 hover:text-red-500 font-black uppercase tracking-widest transition-colors cursor-pointer"
-                            >
-                                Eliminar
-                            </button>
+
+                            <h1 class="text-3xl md:text-5xl lg:text-6xl font-serif font-black text-white leading-[1.1] mb-6 tracking-tight text-left">
+                                {{ post.title }}
+                            </h1>
+
+                            <p class="text-lg md:text-xl text-slate-400 font-light leading-relaxed mb-8 text-left">
+                                {{ post.subtitle }}
+                            </p>
+
+                            <!-- ESCRITO POR — con enlace a perfil de usuario -->
+                            <div class="flex items-center justify-between pt-6 border-t border-white/5 w-full gap-4">
+                                <div class="flex items-center gap-3">
+                                    <div
+                                        class="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center text-xs font-bold text-white overflow-hidden border border-white/10 shadow-lg shrink-0"
+                                        :class="post.user?.name ? 'cursor-pointer hover:border-[#BE2B0C]/50 transition-colors' : ''"
+                                        @click="goProfile(post.user?.name)"
+                                    >
+                                        <img
+                                            v-if="avatarUrl(post.user?.avatar)"
+                                            :src="avatarUrl(post.user?.avatar)"
+                                            class="w-full h-full object-cover"
+                                        />
+                                        <span v-else>{{ editorInitials }}</span>
+                                    </div>
+                                    <div class="text-left">
+                                        <p class="text-[9px] text-slate-500 uppercase tracking-widest font-bold mb-0.5">Escrito por</p>
+                                        <p
+                                            class="text-sm text-white font-bold"
+                                            :class="post.user?.name ? 'cursor-pointer hover:text-[#BE2B0C] transition-colors' : ''"
+                                            @click="goProfile(post.user?.name)"
+                                        >
+                                            {{ post.editorName || post.user?.name || 'Redacción' }}
+                                        </p>
+                                    </div>
+                                </div>
+                                <ShareButton />
+                            </div>
+                        </div>
+
+                        <!-- Columna derecha: miniaturas de películas asociadas -->
+                        <div v-if="post.films?.length" class="shrink-0 sm:w-[140px] lg:w-[160px] mt-6 sm:mt-0 sm:sticky sm:top-24 self-start">
+                            <p class="text-[9px] font-black uppercase tracking-widest text-slate-500 mb-2">
+                                {{ post.films.length === 1 ? 'Película' : 'Películas' }}
+                            </p>
+                            <div class="grid grid-cols-3 sm:grid-cols-2 gap-1.5">
+                                <div
+                                    v-for="film in post.films.slice(0, 6)"
+                                    :key="film.idFilm"
+                                    class="group cursor-pointer"
+                                    @click="goFilm(film.idFilm)"
+                                >
+                                    <div class="rounded overflow-hidden border border-white/10 bg-[#1b2228] transition-all duration-300 group-hover:border-[#BE2B0C]/40 group-hover:shadow-[0_0_12px_rgba(190,43,12,0.1)]">
+                                        <img
+                                            :src="film.frame || '/default-poster.webp'"
+                                            :alt="film.title"
+                                            class="w-full aspect-[2/3] object-cover transition-transform duration-500 group-hover:scale-105"
+                                        />
+                                    </div>
+                                    <p class="mt-1 text-[8px] font-bold text-slate-500 group-hover:text-white transition-colors leading-tight line-clamp-1 text-center">{{ film.title }}</p>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </header>
+
+                <figure class="w-full aspect-video rounded-xl overflow-hidden shadow-2xl border border-white/10 mb-12 bg-[#1b2228] relative">
+                    <img
+                        :src="post.img || '/default-poster.webp'"
+                        :alt="post.title"
+                        class="w-full h-full object-cover"
+                    >
+                </figure>
+
+                <div class="post-content text-slate-300 leading-relaxed text-lg mb-16 font-sans font-light text-left">
+                    <div class="ck-content" v-html="safeContent"></div>
+                </div>
+
+                <section class="border-t border-slate-800/50 pt-12">
+                    <div class="flex items-center gap-3 mb-10">
+                        <span class="w-1.5 h-6 bg-[#BE2B0C] rounded-full shadow-[0_0_10px_#BE2B0C]"></span>
+                        <h3 class="text-[18px] font-black uppercase tracking-[3px] text-slate-400">
+                            Comunidad ({{ comments.length }})
+                        </h3>
+                    </div>
+
+                    <div class="space-y-4">
+                        <div v-if="isAuthenticated" class="mb-12 group">
+                            <textarea
+                                v-model="newComment"
+                                placeholder="¿Qué te parece esta entrada?"
+                                class="w-full bg-slate-900/40 border border-slate-800 rounded-2xl p-5 text-slate-200 focus:ring-2 focus:ring-[#BE2B0C]/30 focus:border-[#BE2B0C]/50 outline-none mb-4 resize-none transition-all text-sm shadow-inner"
+                                rows="3"
+                            ></textarea>
+                            <div class="flex justify-end">
+                                <button
+                                    @click="handlePostComment"
+                                    :disabled="isSending || !newComment.trim()"
+                                    class="bg-[#BE2B0C] hover:bg-[#a02208] text-white font-black py-3 px-10 rounded-full text-[11px] uppercase tracking-[2px] transition-all shadow-xl cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {{ isSending ? 'Enviando...' : 'Publicar' }}
+                                </button>
+                            </div>
+                        </div>
+                        <div v-else class="bg-slate-800/30 p-10 rounded-2xl border border-dashed border-slate-800 text-center">
+                            <p class="text-slate-500 font-black uppercase text-[10px] tracking-widest">
+                                ¡Haz <span @click="openLogin" class="text-[#BE2B0C] cursor-pointer hover:underline">login</span> para participar!
+                            </p>
                         </div>
                     </div>
-                    
-                    <div v-if="comments.length === 0" class="py-10 text-center opacity-50">
-                        <p class="text-[10px] text-slate-500 uppercase tracking-widest">Sé el primero en comentar.</p>
-                    </div>
-                </div>
-            </section>
 
-        </article>
+                    <div class="space-y-6">
+                        <div v-for="comment in comments" :key="comment.id" class="flex gap-5 animate-fade-in group text-left">
+                            <div @click="goProfile(comment.user.name)"
+                                class="w-11 h-11 bg-slate-800 rounded-full flex items-center justify-center text-[#BE2B0C] font-black shrink-0 border border-slate-700 text-lg shadow-md cursor-pointer hover:scale-105 transition-transform overflow-hidden">
+                                <img v-if="avatarUrl(comment.user?.avatar)" :src="avatarUrl(comment.user?.avatar)" class="w-full h-full object-cover">
+                                <span v-else>{{ comment.user?.name?.charAt(0).toUpperCase() || 'U' }}</span>
+                            </div>
+
+                            <div class="flex-1">
+                                <div class="bg-slate-800/30 border border-slate-800/60 p-5 rounded-2xl rounded-tl-none group-hover:border-slate-700 transition-colors">
+                                    <div class="flex items-center justify-between mb-2">
+                                        <span @click="goProfile(comment.user.name)" class="text-white font-bold text-sm cursor-pointer hover:text-[#BE2B0C] transition-colors">
+                                            @{{ comment.user?.name }}
+                                        </span>
+                                        <span class="text-[9px] text-slate-500 uppercase font-black tracking-tighter">
+                                            {{ formatCommentDate(comment.created_at) }}
+                                        </span>
+                                    </div>
+                                    <p class="text-slate-300 text-sm leading-relaxed font-light">
+                                        {{ comment.comment }}
+                                    </p>
+                                </div>
+
+                                <button
+                                    v-if="currentUserId === comment.user_id"
+                                    @click="handleDeleteComment(comment.id)"
+                                    class="ml-4 mt-2 text-[9px] text-slate-600 hover:text-red-500 font-black uppercase tracking-widest transition-colors cursor-pointer"
+                                >
+                                    Eliminar
+                                </button>
+                            </div>
+                        </div>
+
+                        <div v-if="comments.length === 0" class="py-10 text-center opacity-50">
+                            <p class="text-[10px] text-slate-500 uppercase tracking-widest">Sé el primero en comentar.</p>
+                        </div>
+                    </div>
+                </section>
+
+            </article>
+
+        </div>
     </div>
 
     <LoginModal v-model="isLoginOpen" />
@@ -284,7 +335,6 @@ watch(() => route.params.id, () => {
 </template>
 
 <style scoped>
-/* CLASE CLAVE PARA EL CENTRADO IGUAL AL FEED Y PERFIL */
 .content-wrap {
     width: 100%;
     margin-left: auto;
