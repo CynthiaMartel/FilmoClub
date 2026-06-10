@@ -12,13 +12,11 @@ class PostController extends Controller
     // MOSTRAR todos los posts
     public function index(Request $request)
     {
-        // Forzamos la detección del usuario vía Sanctum***
         $user = auth('sanctum')->user();
 
-        $search = $request->input('search'); 
-        $query = Post::query();
+        $search = $request->input('search');
+        $query = Post::with(['user:id,name', 'films:idFilm,title,frame']);
 
-        // Filtros de búsqueda
         if ($search) {
             $query->where(function($q) use ($search) {
                 $q->where('title', 'LIKE', "%{$search}%")
@@ -29,18 +27,14 @@ class PostController extends Controller
 
         $query->orderBy('created_at', 'desc');
 
-        // LÓGICA DE VISIBILIDAD
         $canSeeEverything = false;
 
         if ($user) {
-            // Verificamos permisos (Admin = 1, Editor = 2) o métodos del modelo
-           
             if ($user->idRol == 1 || $user->idRol == 2 || (method_exists($user, 'isAdmin') && ($user->isAdmin() || $user->isEditor()))) {
                 $canSeeEverything = true;
             }
         }
 
-        // Si NO tiene permiso total, solo mostramos los visibles::
         if (!$canSeeEverything) {
             $query->where('visible', 1);
         }
@@ -53,10 +47,8 @@ class PostController extends Controller
     // GUARDAR un nuevo post
     public function store(Request $request)
     {
-        //***
         $user = auth('sanctum')->user();
 
-        // Comprobación de seguridad manual **Tengo que quitar los || y ver qué funciona
         if (!$user || !($user->idRol == 1 || $user->idRol == 2 || (method_exists($user, 'isAdmin') && ($user->isAdmin() || $user->isEditor())))) {
             return response()->json(['message' => 'No tienes permisos para crear posts.'], 403);
         }
@@ -67,19 +59,33 @@ class PostController extends Controller
             'content'    => 'required|string',
             'img'        => ['nullable', 'url', 'max:500', function ($attr, $value, $fail) {
                 $host = (string) parse_url($value, PHP_URL_HOST);
-                // Bloquear IPs privadas / loopback para prevenir SSRF si se añade fetch server-side
                 if (preg_match('/^(localhost|127\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|::1$|0\.0\.0\.0)/i', $host)) {
                     $fail('La URL de imagen no puede apuntar a direcciones de red internas.');
                 }
             }],
             'visible'    => 'boolean',
             'editorName' => 'nullable|string|max:150',
+            'film_ids'   => 'nullable|array|max:10',
+            'film_ids.*' => 'integer|exists:films,idFilm',
         ]);
 
         $validated['content'] = Purifier::clean($validated['content'], 'posts');
         $validated['idUser']  = $user->id;
 
+        $filmIds = $validated['film_ids'] ?? [];
+        unset($validated['film_ids']);
+
         $post = Post::create($validated);
+
+        if (!empty($filmIds)) {
+            $syncData = [];
+            foreach ($filmIds as $order => $filmId) {
+                $syncData[$filmId] = ['order' => $order];
+            }
+            $post->films()->sync($syncData);
+        }
+
+        $post->load(['user:id,name', 'films:idFilm,title,frame']);
 
         return response()->json([
             'message' => 'Post creado correctamente.',
@@ -87,18 +93,15 @@ class PostController extends Controller
         ], 201);
     }
 
-    // MOSTRAR un solo post por ID  **Mirar paginación para limitar carga !! Por hacer**
+    // MOSTRAR un solo post por ID
     public function show($id)
     {
-        $post = Post::findOrFail($id);
-        
-        // CORRECCIÓN: Usamos auth('sanctum')->user() para detectar el token en rutas públicas**
+        $post = Post::with(['user:id,name', 'films:idFilm,title,frame'])->findOrFail($id);
+
         $user = auth('sanctum')->user();
 
-        // Lógica de permisos unificada
         $isAdminOrEditor = $user && ($user->idRol == 1 || $user->idRol == 2 || (method_exists($user, 'isAdmin') && ($user->isAdmin() || $user->isEditor())));
 
-        // Si el post NO es visible Y el usuario NO es admin/editor : Bloquear
         if (!$post->visible && !$isAdminOrEditor) {
             return response()->json(['message' => 'No tienes permiso para ver este post.'], 403);
         }
@@ -111,7 +114,6 @@ class PostController extends Controller
     {
         $user = auth('sanctum')->user();
 
-        // Comprobación de seguridad
         if (!$user || !($user->idRol == 1 || $user->idRol == 2 || (method_exists($user, 'isAdmin') && ($user->isAdmin() || $user->isEditor())))) {
             return response()->json(['message' => 'No tienes permisos para actualizar posts.'], 403);
         }
@@ -130,11 +132,24 @@ class PostController extends Controller
             }],
             'visible'    => 'boolean',
             'editorName' => 'nullable|string|max:150',
+            'film_ids'   => 'nullable|array|max:10',
+            'film_ids.*' => 'integer|exists:films,idFilm',
         ]);
 
         $validated['content'] = Purifier::clean($validated['content'], 'posts');
 
+        $filmIds = $validated['film_ids'] ?? [];
+        unset($validated['film_ids']);
+
         $post->update($validated);
+
+        $syncData = [];
+        foreach ($filmIds as $order => $filmId) {
+            $syncData[$filmId] = ['order' => $order];
+        }
+        $post->films()->sync($syncData);
+
+        $post->load(['user:id,name', 'films:idFilm,title,frame']);
 
         return response()->json([
             'message' => 'Post actualizado correctamente.',

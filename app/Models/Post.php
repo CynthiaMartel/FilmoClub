@@ -12,5 +12,12 @@ class Post extends Model
     {
         return $this->belongsTo(User::class, 'idUser');
     }
+
+    public function films()
+    {
+        return $this->belongsToMany(Film::class, 'post_films', 'post_id', 'film_id')
+                    ->withPivot('order')
+                    ->orderBy('post_films.order');
+    }
 }
 
