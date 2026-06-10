@@ -20,10 +20,15 @@ const handleDeleteRating = () => {
 const hoverWidth = ref(0);
 
 
+const getXFromEvent = (e) => {
+  const rect = e.currentTarget.getBoundingClientRect();
+  const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+  return Math.max(0, Math.min(clientX - rect.left, 180));
+};
+
 const handleMouseMove = (e) => {
   if (isSavingRate.value) return;
-  const rect = e.currentTarget.getBoundingClientRect();
-  const x = e.clientX - rect.left;
+  const x = getXFromEvent(e);
   const steps = Math.ceil(x / 18);
   hoverWidth.value = steps * 18;
 };
@@ -38,6 +43,25 @@ const handleStarClick = () => {
   userVote.value = points;
   store.saveRating(props.filmId, props.filmRef);
 };
+
+const handleTouchStart = (e) => {
+  if (isSavingRate.value) return;
+  const x = getXFromEvent(e);
+  hoverWidth.value = Math.max(1, Math.ceil(x / 18)) * 18;
+};
+
+const handleTouchMove = (e) => {
+  if (isSavingRate.value) return;
+  const x = getXFromEvent(e);
+  hoverWidth.value = Math.max(1, Math.ceil(x / 18)) * 18;
+};
+
+const handleTouchEnd = () => {
+  if (isSavingRate.value || hoverWidth.value === 0) return;
+  userVote.value = hoverWidth.value / 18;
+  store.saveRating(props.filmId, props.filmRef);
+  hoverWidth.value = 0;
+};
 </script>
 
 <template>
@@ -49,6 +73,9 @@ const handleStarClick = () => {
       @mousemove="handleMouseMove"
       @mouseleave="handleMouseLeave"
       @click="handleStarClick"
+      @touchstart.prevent="handleTouchStart"
+      @touchmove.prevent="handleTouchMove"
+      @touchend="handleTouchEnd"
       :class="{ 'is-loading': isSavingRate }"
       role="slider"
       :aria-valuenow="userVote"
@@ -159,7 +186,7 @@ const handleStarClick = () => {
   z-index: 2;
 }
 .stars-hover::before {
-  content: "\f586 \f586 \f586 \f586 \f586"; 
+  content: "\f586 \f586 \f586 \f586 \f586";
 }
 
 .rating-info {
