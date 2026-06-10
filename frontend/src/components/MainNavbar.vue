@@ -506,31 +506,30 @@ onBeforeUnmount(() => {
             <!-- Chromium (Brave/Chrome): prompt no disponible aún, instrucciones manuales -->
             <template v-else-if="installPanel === 'chromium-manual'">
               <div class="flex items-center gap-3 mb-4">
-                <span class="text-2xl">🧩</span>
+                <span class="text-2xl">📲</span>
                 <h2 class="text-base font-bold text-white">Instalar FilmoClub</h2>
               </div>
 
+              <!-- Explicación principal: Chrome necesita engagement -->
+              <div class="rounded-lg bg-amber-500/10 border border-amber-500/30 px-3 py-2.5 text-sm text-amber-200 leading-relaxed mb-4">
+                <strong class="block mb-1">Este navegador necesita que explores la app un poco antes de permitir la instalación.</strong>
+                Visita algunas películas, navega por la comunidad y vuelve a pulsar este botón. El icono de instalación aparecerá solo en tu navegador.
+              </div>
+
               <!-- Opción A: icono en barra de direcciones -->
-              <p class="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Opción más rápida</p>
+              <p class="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Cuando esté disponible — opción rápida</p>
               <p class="text-sm text-slate-300 mb-3">
-                Mira la <strong class="text-white">barra de direcciones</strong> del navegador: si ves un icono de instalación
+                Mira la <strong class="text-white">barra de direcciones</strong>: si ves un icono
                 <strong class="text-white">(pantalla con flecha ↓)</strong>, púlsalo directamente.
               </p>
 
               <!-- Opción B: menú ⋮ -->
-              <p class="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">O bien, desde el menú</p>
-              <ol class="space-y-1.5 text-sm text-slate-300 mb-4">
-                <li class="flex gap-2"><span class="text-slate-500 font-mono">1.</span>Pulsa el menú <strong class="text-white">⋮</strong> del navegador (arriba a la derecha)</li>
+              <p class="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">O desde el menú del navegador</p>
+              <ol class="space-y-1.5 text-sm text-slate-300">
+                <li class="flex gap-2"><span class="text-slate-500 font-mono">1.</span>Pulsa el menú <strong class="text-white">⋮</strong> (arriba a la derecha)</li>
                 <li class="flex gap-2"><span class="text-slate-500 font-mono">2.</span>Busca <strong class="text-white">Instalar FilmoClub…</strong></li>
                 <li class="flex gap-2"><span class="text-slate-500 font-mono">3.</span>Confirma con <strong class="text-white">Instalar</strong></li>
               </ol>
-
-              <!-- Aviso si no aparece nada -->
-              <div class="rounded-lg bg-white/5 border border-white/10 px-3 py-2.5 text-xs text-slate-400 leading-relaxed">
-                <strong class="text-slate-300 block mb-0.5">¿No ves ninguna de estas opciones?</strong>
-                Brave y Chrome necesitan que visites varias páginas del sitio antes de activar la instalación.
-                Navega un poco, cierra y vuelve a abrir el navegador, y el icono aparecerá solo.
-              </div>
             </template>
 
             <!-- Firefox Android: instalación manual desde el menú del navegador -->
