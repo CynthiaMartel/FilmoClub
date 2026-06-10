@@ -137,13 +137,14 @@ class FilmController extends Controller
 
         $films->getCollection()->transform(function (Film $film) {
             return [
-                'idFilm'         => $film->idFilm,
-                'title'          => $film->title,
-                'original_title' => $film->original_title,
-                'year'           => $film->release_date ? substr($film->release_date, 0, 4) : null,
-                'genre'          => $film->genre,
-                'frame'          => $film->frame,
-                'vote_average'   => $film->vote_average,
+                'idFilm'             => $film->idFilm,
+                'title'              => $film->title,
+                'original_title'     => $film->original_title,
+                'alternative_titles' => $film->alternative_titles,
+                'year'               => $film->release_date ? substr($film->release_date, 0, 4) : null,
+                'genre'              => $film->genre,
+                'frame'              => $film->frame,
+                'vote_average'       => $film->vote_average,
             ];
         });
 
@@ -614,9 +615,8 @@ class FilmController extends Controller
             });
 
         $recentlyImported = Film::select('idFilm', 'title', 'release_date', 'frame', 'created_at')
-            ->where('created_at', '>=', now()->subDays(14))
             ->orderByDesc('created_at')
-            ->limit(30)
+            ->limit(20)
             ->get()
             ->map(fn ($f) => [
                 'id'          => $f->idFilm,
@@ -626,7 +626,7 @@ class FilmController extends Controller
                 'imported_at' => $f->created_at->toISOString(),
             ]);
 
-        $recentTotal = Film::where('created_at', '>=', now()->subDays(14))->count();
+        $recentTotal = Film::count();
 
         return response()->json([
             'pending_total'      => \DB::table('jobs')->count(),

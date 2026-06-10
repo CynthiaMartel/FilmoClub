@@ -28,18 +28,20 @@ class SearchController extends Controller
             ]]);
         }
 
+        $qLower = mb_strtolower($q);
+
         // Films
         try {
             $films = Film::where('title', 'like', "%{$q}%")
                 ->orWhere('original_title', 'like', "%{$q}%")
-                ->orWhere('alternative_titles', 'like', "%{$q}%")
+                ->orWhereRaw("LOWER(CAST(alternative_titles AS CHAR)) LIKE ?", ["%{$qLower}%"])
                 ->orderBy('release_date', 'desc')
                 ->limit(8)
                 ->get()
                 ->map(fn($f) => [
                     'id'    => $f->idFilm,
                     'type'  => 'film',
-                    'title' => $f->title,
+                    'title' => ($f->alternative_titles['es'] ?? null) ?: $f->title,
                     'year'  => $f->release_date ? substr($f->release_date, 0, 4) : null,
                     'frame' => $f->frame,
                     'genre' => $f->genre,
