@@ -36,7 +36,7 @@
           </div>
         </div>
 
-        <div class="flex items-center justify-between gap-4 mb-6">
+        <div class="flex items-center justify-between gap-4 mb-3">
           <h1 class="text-4xl md:text-5xl lg:text-6xl font-black text-white tracking-tighter leading-[1.1] max-w-4xl drop-shadow-md">
             {{ entry.title }}
           </h1>
@@ -63,6 +63,7 @@
             </button>
           </div>
         </div>
+        <ShareButton class="mb-6" />
       </div>
 
       <main>
@@ -181,7 +182,7 @@
               <MovieGrid :films="mappedFilms" show-numbers />
           </div>
 
-          <div class="mt-12 flex items-center gap-4">
+          <div class="mt-12 flex flex-wrap items-center gap-4">
             <button
               v-if="auth.isAuthenticated"
               @click="toggleLike"
@@ -252,7 +253,7 @@
              </div>
              <div class="review-content ck-content text-xl md:text-2xl leading-[1.9] text-slate-200 font-light" v-html="entry.content"></div>
 
-             <div class="mt-12 flex items-center gap-4">
+             <div class="mt-12 flex flex-wrap items-center gap-4">
               <button
                 v-if="auth.isAuthenticated"
                 @click="toggleLike"
@@ -317,6 +318,7 @@ import MovieGrid from '@/components/MovieGrid.vue';
 import CommentSection from '@/components/CommentSection.vue';
 import LoginModal from '@/components/LoginModal.vue';
 import { useLikeToggle } from '@/composables/useLikeToggle';
+import ShareButton from '@/components/ShareButton.vue';
 
 const route = useRoute();
 const router = useRouter();

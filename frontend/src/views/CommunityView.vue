@@ -261,7 +261,7 @@ onMounted(fetchFeed)
 
 .mini-poster-stack { overflow: hidden; }
 .mini-poster-list { display: flex; height: 135px; position: relative; list-style: none; padding: 0; margin: 0; }
-.mini-poster-item { position: relative; width: 90px; height: 135px; margin-left: -63px; flex-shrink: 0; transition: transform 0.4s ease; }
+.mini-poster-item { position: relative; width: 90px; height: 135px; margin-left: -45px; flex-shrink: 0; transition: transform 0.4s ease; }
 .mini-poster-item:first-child { margin-left: 0; }
 .mini-poster-img { width: 90px; height: 135px; object-fit: cover; border: 1.5px solid #14181c; border-radius: 5px; box-shadow: 8px 0 18px rgba(0,0,0,0.6); }
 .group:hover .mini-poster-item { transform: translateY(-6px) rotate(-1deg); }

@@ -289,7 +289,7 @@ onMounted(() => fetchEntries());
 
 /* POSTER SOLAPADO (Solo para listas) */
 .poster-list-overlapped { display: flex; height: 150px; position: relative; }
-.poster-item { position: relative; width: 100px; height: 150px; margin-left: -75px; transition: transform 0.4s ease; }
+.poster-item { position: relative; width: 100px; height: 150px; margin-left: -50px; transition: transform 0.4s ease; }
 .poster-item:first-child { margin-left: 0; }
 .poster-img { width: 100px; height: 150px; object-fit: cover; border: 1.5px solid #0f1113; border-radius: 6px; box-shadow: 10px 0 30px rgba(0,0,0,0.5); }
 .group:hover .poster-item { transform: translateY(-8px) rotate(-1deg); }
